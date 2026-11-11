@@ -1,0 +1,500 @@
+{
+  "version": 1,
+  "author": "Arduino Project",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 28.8,
+      "left": -177.56,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo1",
+      "top": 430,
+      "left": -9.6,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": 428.6,
+      "left": -326.4,
+      "attrs": {
+        "color": "green",
+        "xray": "1"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn2",
+      "top": 188.6,
+      "left": -336,
+      "attrs": {
+        "color": "blue",
+        "xray": "1"
+      }
+    },
+    {
+      "type": "wokwi-analog-joystick",
+      "id": "joystick1",
+      "top": 229.8,
+      "left": -13.8,
+      "attrs": {}
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled1",
+      "top": 118.34,
+      "left": -9.37,
+      "attrs": {
+        "i2cAddress": "0x3c"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": 438,
+      "left": -140.2,
+      "attrs": {
+        "color": "limegreen"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 438,
+      "left": -169,
+      "attrs": {
+        "color": "red",
+        "flip": "1"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led3",
+      "top": 313.2,
+      "left": -121,
+      "attrs": {
+        "color": "limegreen"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led4",
+      "top": 313.2,
+      "left": -149.4,
+      "attrs": {
+        "color": "red",
+        "flip": "1"
+      }
+    },
+    {
+      "type": "wokwi-ds1307",
+      "id": "rtc1",
+      "top": 109.8,
+      "left": 144.1,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": 60,
+      "left": -391.8,
+      "attrs": {
+        "volume": "0.1"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 147.95,
+      "left": -316.8,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo2",
+      "top": 430,
+      "left": 172.8,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "ir1",
+      "top": 389.6,
+      "left": -246.5,
+      "attrs": {
+        "value": ""
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "t_ir",
+      "top": 360,
+      "left": -300,
+      "attrs": {
+        "text": "IR sensor (slide right = pill in tray)"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "t_lift",
+      "top": 290,
+      "left": -190,
+      "attrs": {
+        "text": "Lift UP / DOWN (L298N IN1/IN2)"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "t_led",
+      "top": 500,
+      "left": -190,
+      "attrs": {
+        "text": "Web OK / Pill waiting"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "t_srv",
+      "top": 520,
+      "left": -10,
+      "attrs": {
+        "text": "Tray (18)       Pusher (19)"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "t_btn",
+      "top": 480,
+      "left": -340,
+      "attrs": {
+        "text": "Test dispense (4)"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "t_btn2",
+      "top": 240,
+      "left": -350,
+      "attrs": {
+        "text": "Stop song (5)"
+      }
+    }
+  ],
+  "connections": [
+    [
+      "esp:TX",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp:RX",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "esp:GND.2",
+      "oled1:GND",
+      "black",
+      [
+        "v0",
+        "h76.8"
+      ]
+    ],
+    [
+      "oled1:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v-105.6",
+        "h-211.2"
+      ]
+    ],
+    [
+      "joystick1:VCC",
+      "esp:3V3",
+      "red",
+      [
+        "v38.4",
+        "h-249.6",
+        "v-316.8"
+      ]
+    ],
+    [
+      "joystick1:GND",
+      "esp:GND.1",
+      "black",
+      [
+        "v67.2",
+        "h-268.8",
+        "v-201.6"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "btn2:1.r",
+      "black",
+      [
+        "h0"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "btn1:1.r",
+      "black",
+      [
+        "h-67.05",
+        "v134.4"
+      ]
+    ],
+    [
+      "led4:C",
+      "led3:C",
+      "green",
+      [
+        "v19.2",
+        "h18.8"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "led4:C",
+      "black",
+      [
+        "h-38.25",
+        "v230.4",
+        "h96"
+      ]
+    ],
+    [
+      "led2:C",
+      "led1:C",
+      "green",
+      [
+        "v19.2",
+        "h9.6"
+      ]
+    ],
+    [
+      "esp:GND.1",
+      "led2:C",
+      "black",
+      [
+        "h-38.25",
+        "v336",
+        "h67.2"
+      ]
+    ],
+    [
+      "servo1:GND",
+      "esp:GND.1",
+      "black",
+      [
+        "h-28.8",
+        "v48",
+        "h-172.8",
+        "v-345.6"
+      ]
+    ],
+    [
+      "servo1:V+",
+      "esp:5V",
+      "red",
+      [
+        "h-19.2",
+        "v57.7",
+        "h-192"
+      ]
+    ],
+    [
+      "rtc1:GND",
+      "esp:GND.2",
+      "black",
+      [
+        "h-19.2",
+        "v-67.2"
+      ]
+    ],
+    [
+      "rtc1:5V",
+      "esp:5V",
+      "red",
+      [
+        "h-38.4",
+        "v-134.8",
+        "h-355.2",
+        "v48"
+      ]
+    ],
+    [
+      "joystick1:SEL",
+      "esp:25",
+      "gold",
+      [
+        "v76.8",
+        "h-297.6",
+        "v-278.4"
+      ]
+    ],
+    [
+      "bz1:2",
+      "r1:1",
+      "green",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:26",
+      "r1:2",
+      "green",
+      [
+        "h0"
+      ]
+    ],
+    [
+      "bz1:1",
+      "esp:GND.1",
+      "black",
+      [
+        "v0"
+      ]
+    ],
+    [
+      "esp:21",
+      "oled1:SDA",
+      "blue",
+      [
+        "h134.4"
+      ]
+    ],
+    [
+      "rtc1:SDA",
+      "oled1:SDA",
+      "blue",
+      [
+        "h-57.6",
+        "v-38.7",
+        "h-38.4"
+      ]
+    ],
+    [
+      "esp:22",
+      "oled1:SCL",
+      "magenta",
+      [
+        "h0"
+      ]
+    ],
+    [
+      "esp:22",
+      "rtc1:SCL",
+      "magenta",
+      [
+        "h182.4",
+        "v48"
+      ]
+    ],
+    [
+      "esp:35",
+      "joystick1:VERT",
+      "magenta",
+      [
+        "h-47.85",
+        "v288",
+        "h249.6"
+      ]
+    ],
+    [
+      "esp:34",
+      "joystick1:HORZ",
+      "green",
+      [
+        "h-86.25",
+        "v307.2",
+        "h297.6"
+      ]
+    ],
+    [
+      "servo1:PWM",
+      "esp:18",
+      "orange",
+      []
+    ],
+    [
+      "servo2:PWM",
+      "esp:19",
+      "orange",
+      []
+    ],
+    [
+      "servo2:V+",
+      "esp:5V",
+      "red",
+      []
+    ],
+    [
+      "servo2:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "led3:A",
+      "esp:32",
+      "green",
+      []
+    ],
+    [
+      "led4:A",
+      "esp:33",
+      "red",
+      []
+    ],
+    [
+      "led1:A",
+      "esp:13",
+      "green",
+      []
+    ],
+    [
+      "led2:A",
+      "esp:14",
+      "red",
+      []
+    ],
+    [
+      "btn1:2.r",
+      "esp:4",
+      "green",
+      []
+    ],
+    [
+      "btn2:2.r",
+      "esp:5",
+      "blue",
+      []
+    ],
+    [
+      "ir1:2",
+      "esp:27",
+      "violet",
+      []
+    ],
+    [
+      "ir1:3",
+      "esp:GND.1",
+      "black",
+      []
+    ]
+  ],
+  "dependencies": {}
+}

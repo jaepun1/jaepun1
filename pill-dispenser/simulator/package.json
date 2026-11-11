@@ -1,0 +1,13 @@
+{
+  "name": "pill-dispenser-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "เครื่องจ่ายยาจำลองสำหรับทดสอบเว็บแอป (WebSocket เหมือน ESP32-S3 CAM)",
+  "main": "device-sim.js",
+  "scripts": {
+    "start": "node device-sim.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

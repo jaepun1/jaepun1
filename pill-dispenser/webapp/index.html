@@ -1,0 +1,1049 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>เครื่องจ่ายยา</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: control-panel feel — slim header, two tabs, calendar + day editor side by side, machine rack beneath */
+:root{
+  --bg:#eef3fa; --surface:#ffffff; --surface-2:#e3ecf8; --line:#c9d7ea;
+  --ink:#0d1726; --ink-2:#4a5b74;
+  --blue:#1546b8; --blue-ink:#ffffff; --sky:#38a9f0; --sky-soft:#d8eefc;
+  --yellow:#ffc928; --yellow-ink:#2a1f00; --yellow-soft:#fff3c4;
+  --danger:#c62f2f; --ok:#16875a;
+  --f-display:"Chakra Petch","IBM Plex Sans Thai",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans Thai",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+  --ok-soft:#dcf5e9; --danger-soft:#fde4e4;
+  --r:14px;
+  --shadow:0 1px 2px rgba(13,23,38,.04),0 10px 30px rgba(21,70,184,.07);
+  --shadow-lg:0 2px 6px rgba(13,23,38,.06),0 30px 70px rgba(21,70,184,.18);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#070c16; --surface:#0f1828; --surface-2:#16233a; --line:#24375a;
+  --ink:#e8f0fc; --ink-2:#93a7c6;
+  --blue:#3b74f0; --blue-ink:#ffffff; --sky:#5cc0ff; --sky-soft:#11314d;
+  --yellow:#ffcf3d; --yellow-ink:#241a00; --yellow-soft:#3a2f08;
+  --danger:#ff6b6b; --ok:#4fd39a; --ok-soft:#0f3a2a; --danger-soft:#3d1717; color-scheme:dark;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3);
+  --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 30px 70px rgba(0,0,0,.5)}}
+:root[data-theme="dark"]{
+  --bg:#070c16; --surface:#0f1828; --surface-2:#16233a; --line:#24375a;
+  --ink:#e8f0fc; --ink-2:#93a7c6;
+  --blue:#3b74f0; --blue-ink:#ffffff; --sky:#5cc0ff; --sky-soft:#11314d;
+  --yellow:#ffcf3d; --yellow-ink:#241a00; --yellow-soft:#3a2f08;
+  --danger:#ff6b6b; --ok:#4fd39a; --ok-soft:#0f3a2a; --danger-soft:#3d1717; color-scheme:dark;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3);
+  --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 30px 70px rgba(0,0,0,.5)}
+
+*{box-sizing:border-box}
+body{background:radial-gradient(1100px 520px at 105% -10%,var(--sky-soft),transparent 60%),radial-gradient(900px 420px at -10% 110%,var(--yellow-soft),transparent 60%),var(--bg);background-attachment:fixed;color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;line-height:1.2}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-2)}
+.btn{border:0;border-radius:12px;padding:.6rem 1.05rem;font-weight:600;cursor:pointer;background:linear-gradient(180deg,var(--sky),var(--blue) 90%);background:var(--blue);color:var(--blue-ink);box-shadow:0 4px 14px rgba(21,70,184,.22);transition:transform .12s,filter .12s}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:translateY(1px)}
+.btn.y{background:var(--yellow);color:var(--yellow-ink);box-shadow:0 4px 14px rgba(255,201,40,.3)}
+.btn.ghost{box-shadow:none}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.sm{padding:.35rem .7rem;font-size:.85rem}
+.field{display:grid;gap:.3rem}
+.field label{font-size:.85rem;font-weight:600;color:var(--ink-2)}
+.field input,.field select{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.7rem .85rem;width:100%;transition:border-color .15s,box-shadow .15s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--sky);box-shadow:0 0 0 4px var(--sky-soft)}
+.err{color:var(--danger);font-size:.88rem;min-height:1.3em}
+
+/* ---------- auth ---------- */
+#auth{min-height:100%;display:grid;place-items:center;padding-block:32px}
+.auth-shell{width:100%;max-width:960px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);border-radius:26px;overflow:hidden;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lg)}
+@media (max-width:760px){.auth-shell{grid-template-columns:minmax(0,1fr)}}
+.auth-hero{position:relative;overflow:hidden;color:#fff;padding:38px 34px;display:flex;flex-direction:column;gap:14px;min-height:480px;
+  background:radial-gradient(420px 260px at 90% 10%,rgba(92,192,255,.55),transparent 70%),linear-gradient(160deg,#081f5c 0%,#1546b8 55%,#2a86dc 100%)}
+@media (max-width:760px){.auth-hero{min-height:0;padding:28px 22px 26px}}
+.auth-hero>*:not(.cap):not(.blister){position:relative;z-index:1}
+.auth-hero .logo{width:86px;height:auto;max-width:100%;background:#fff;border-radius:22px;padding:10px 12px;box-shadow:0 10px 30px rgba(3,10,35,.35)}
+.auth-hero h1{font-size:clamp(2.1rem,5vw,3rem);font-weight:700;letter-spacing:.01em;margin-top:6px}
+.auth-hero h1 em{font-style:normal;color:var(--yellow)}
+.auth-hero p{margin:0;max-width:30ch;opacity:.88;line-height:1.65}
+.hero-facts{list-style:none;padding:0;margin:auto 0 0;display:flex;gap:10px;flex-wrap:wrap}
+.hero-facts li{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(6px);border-radius:14px;padding:8px 14px;font-size:.85rem;display:grid;line-height:1.25}
+.hero-facts b{font-family:var(--f-display);font-size:1.3rem;color:var(--yellow)}
+.cap{position:absolute;width:92px;height:34px;border-radius:999px;background:linear-gradient(90deg,var(--yellow) 50%,#f4f8ff 50%);box-shadow:inset -6px -4px 10px rgba(0,0,0,.12),0 12px 24px rgba(3,10,35,.3);animation:float 7s ease-in-out infinite alternate}
+.cap::after{content:"";position:absolute;left:12px;top:6px;width:30px;height:6px;border-radius:999px;background:rgba(255,255,255,.55)}
+.cap.c1{right:-14px;top:70px;transform:rotate(-32deg)}
+.cap.c2{right:70px;top:190px;width:64px;height:24px;transform:rotate(24deg);animation-delay:-2s;background:linear-gradient(90deg,var(--sky) 50%,#f4f8ff 50%)}
+.cap.c3{right:20px;bottom:120px;width:76px;height:28px;transform:rotate(-8deg);animation-delay:-4s}
+@keyframes float{to{translate:0 -14px}}
+@media (prefers-reduced-motion:reduce){.cap{animation:none}}
+@media (max-width:760px){.cap.c2,.cap.c3{display:none}}
+.blister{position:absolute;right:28px;bottom:28px;display:grid;grid-template-columns:repeat(6,14px);gap:6px;padding:10px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);transform:rotate(-6deg)}
+.blister i{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:inset 0 -2px 3px rgba(0,0,0,.15)}
+.blister i.on{background:var(--yellow)}
+@media (max-width:760px){.blister{display:none}}
+.auth-card{padding:40px 36px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+@media (max-width:760px){.auth-card{padding:26px 22px 28px}}
+.eyebrow{font-size:.78rem;font-weight:600;letter-spacing:.08em;color:var(--sky)}
+.auth-card h2{font-size:1.9rem;margin-top:2px}
+.auth-body{display:grid;gap:14px;margin-top:18px}
+.auth-body .btn{padding:.8rem 1rem}
+.auth-switch{border-top:1px solid var(--line);padding-top:14px;text-align:center;font-size:.92rem}
+.link{background:none;border:0;color:var(--blue);font-weight:600;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}
+:root[data-theme="dark"] .link{color:var(--sky)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .link{color:var(--sky)}}
+
+/* ---------- app shell ---------- */
+header.top{background:linear-gradient(90deg,#061640,#0f3796 70%,#1a5cc8);color:#fff;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 6px 24px rgba(6,22,64,.25)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:#061640}
+.top-in{display:flex;align-items:center;gap:14px;padding-block:10px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:700;font-size:1.15rem;display:flex;align-items:center;gap:10px;line-height:1.1}
+.brand img{width:34px;height:auto;background:#fff;border-radius:9px;padding:3px 4px}
+.brand small{display:block;font-family:var(--f-body);font-weight:400;font-size:.72rem;opacity:.7}
+.tabs{display:flex;gap:4px;margin-left:auto;background:rgba(255,255,255,.1);padding:4px;border-radius:999px;overflow-x:auto;max-width:100%}
+.tab{border:0;background:transparent;color:#d6e3fa;padding:.42rem 1rem;border-radius:999px;cursor:pointer;font-weight:600;white-space:nowrap}
+.tab:hover{background:rgba(255,255,255,.1)}
+.tab[aria-selected="true"]{background:var(--yellow);color:var(--yellow-ink);box-shadow:0 2px 10px rgba(255,201,40,.35)}
+.user{display:flex;align-items:center;gap:8px;font-size:.9rem;color:#cfdcf2}
+.user .btn{color:#fff;border-color:rgba(255,255,255,.25)}
+main{padding-block:22px 48px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow)}
+.panel h2{font-size:1.12rem;margin-bottom:4px;display:flex;align-items:center;gap:9px}
+.panel h2::before{content:"";flex:none;width:20px;height:9px;border-radius:999px;background:linear-gradient(90deg,var(--yellow) 50%,var(--sky) 50%)}
+.grid-use{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:860px){.grid-use{grid-template-columns:minmax(0,1fr)}}
+
+/* calendar */
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin:10px 0}
+.cal-head strong{font-family:var(--f-display);font-size:1.05rem}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .wd{font-size:.75rem;text-align:center;color:var(--ink-2);font-weight:600;padding-bottom:2px}
+.day{aspect-ratio:1;border:1px solid transparent;border-radius:8px;background:var(--surface-2);cursor:pointer;position:relative;font-variant-numeric:tabular-nums;font-weight:500;max-width:100%}
+.day:hover:not(:disabled){border-color:var(--sky)}
+.day:disabled{background:transparent;color:var(--ink-2);opacity:.45;cursor:not-allowed}
+.day.today{border-color:var(--ink-2)}
+.day.sel{background:var(--blue);color:var(--blue-ink)}
+.day.sel.active{background:var(--yellow);color:var(--yellow-ink)}
+.day .fl{position:absolute;top:2px;right:4px;font-size:.62rem;font-family:var(--f-mono);opacity:.9}
+.count{display:flex;gap:4px;margin-top:12px;align-items:center;font-size:.85rem}
+.count i{flex:1;height:6px;border-radius:3px;background:var(--surface-2)}
+.count i.on{background:var(--blue)}
+
+/* day editor */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:.3rem .75rem;cursor:pointer;font-size:.88rem;display:flex;gap:6px;align-items:center}
+.chip .f{font-family:var(--f-mono);font-size:.72rem;background:var(--sky-soft);border-radius:4px;padding:0 5px}
+.chip[aria-pressed="true"]{border-color:var(--yellow);background:var(--yellow-soft)}
+.editor-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:end;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px}
+.editor-head h3{font-size:1.25rem}
+.floor-tag{display:inline-block;background:var(--blue);color:var(--blue-ink);font-family:var(--f-mono);font-size:.78rem;border-radius:5px;padding:1px 7px;margin-right:6px;vertical-align:middle}
+.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:560px){.slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.slot{border:1px solid var(--line);border-radius:var(--r);padding:12px;display:grid;gap:8px;background:var(--surface)}
+.slot.on{border-color:var(--sky);background:var(--sky-soft)}
+.slot-top{display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.slot input[type=time]{width:100%;font-family:var(--f-mono);font-size:1.1rem;padding:.35rem .5rem;border:1px solid var(--line);border-radius:7px;background:var(--surface)}
+.slot input[type=time]:disabled{opacity:.4}
+.sw{position:relative;width:38px;height:22px;flex:none}
+.sw input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.sw span{position:absolute;inset:0;border-radius:999px;background:var(--line);transition:background .15s}
+.sw span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.sw input:checked+span{background:var(--blue)}
+.sw input:checked+span::after{transform:translateX(16px)}
+.sw input:focus-visible+span{outline:2px solid var(--sky);outline-offset:2px}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;align-items:center;font-size:.85rem}
+.empty{border:1px dashed var(--line);border-radius:var(--r);padding:28px;text-align:center;color:var(--ink-2)}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+
+/* rack */
+.rack-wrap{margin-top:18px}
+.rack{display:grid;gap:5px;margin-top:12px}
+.rack-row{display:grid;grid-template-columns:62px repeat(6,minmax(0,1fr));gap:5px;align-items:center}
+.rack-row .lab{font-family:var(--f-mono);font-size:.78rem;color:var(--ink-2)}
+.rack-row.cur .lab{color:var(--ink);font-weight:700}
+.cell{position:relative;min-height:54px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);display:grid;place-content:center;justify-items:center;gap:1px;font-family:var(--f-mono);font-size:.8rem;color:var(--ink-2);transition:transform .2s,box-shadow .15s;padding:4px 2px;min-width:0;cursor:pointer;font-variant-numeric:tabular-nums}
+.cell:disabled{cursor:default;opacity:.55}
+.cell:not(:disabled):hover{box-shadow:0 0 0 3px var(--sky-soft);border-color:var(--sky)}
+.cell .t{font-weight:600;line-height:1.1}
+.cell .st{font-family:var(--f-body);font-size:.66rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cell .cam{position:absolute;top:3px;right:5px;width:12px;height:12px;opacity:.8}
+.cell.on,.cell.st-wait{background:var(--yellow-soft);border-color:var(--yellow);color:var(--ink)}
+.cell.st-ready{background:var(--yellow);border-color:var(--yellow);color:var(--yellow-ink)}
+.cell.st-taken{background:var(--ok-soft);border-color:var(--ok);color:var(--ink)}
+.cell.st-taken .st{color:var(--ok);font-weight:600}
+.cell.st-missed{background:var(--danger-soft);border-color:var(--danger);color:var(--ink)}
+.cell.st-missed .st{color:var(--danger);font-weight:600}
+@media (max-width:560px){.rack-row{grid-template-columns:46px repeat(6,minmax(0,1fr));gap:4px}.cell{min-height:46px;border-radius:12px}.cell .st{display:none}.cell .t{font-size:.72rem}.rack-base{margin-left:50px}}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:.8rem;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:5px;border:1px solid var(--line);background:var(--surface-2)}
+.legend .lw{background:var(--yellow-soft);border-color:var(--yellow)}
+.legend .lr{background:var(--yellow);border-color:var(--yellow)}
+.legend .lt{background:var(--ok-soft);border-color:var(--ok)}
+.legend .lm{background:var(--danger-soft);border-color:var(--danger)}
+
+/* slot detail */
+dialog.slot-dlg{border:0;padding:0;border-radius:24px;width:min(520px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-lg)}
+dialog.slot-dlg::backdrop{background:rgba(6,22,64,.55);backdrop-filter:blur(3px)}
+.dlg-head{display:flex;justify-content:space-between;align-items:start;gap:10px;padding:20px 22px 0}
+.dlg-head h3{font-size:1.4rem;margin-top:2px}
+.dlg-body{padding:16px 22px 22px;display:grid;gap:16px}
+.status-big{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:4px 12px;font-weight:600;font-size:.9rem;justify-self:start}
+.status-big::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+.status-big.taken{background:var(--ok-soft);color:var(--ok)}
+.status-big.missed{background:var(--danger-soft);color:var(--danger)}
+.status-big.ready{background:var(--yellow);color:var(--yellow-ink)}
+.status-big.wait{background:var(--yellow-soft);color:var(--ink)}
+.status-big.off{background:var(--surface-2);color:var(--ink-2)}
+.photo{aspect-ratio:4/3;max-width:100%;border-radius:16px;border:1.5px dashed var(--line);background:var(--surface-2);display:grid;place-content:center;justify-items:center;text-align:center;gap:6px;padding:16px;color:var(--ink-2);overflow:hidden}
+.photo svg{width:42px;height:42px;color:var(--sky)}
+.photo b{color:var(--ink);font-size:.95rem}
+.photo.has{padding:0;border-style:solid;place-content:stretch}
+.photo.has img{width:100%;height:100%;object-fit:cover;display:block}
+.photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.photos figure{margin:0;display:grid;gap:4px;min-width:0}
+.photos figcaption{font-size:.8rem;font-weight:600;color:var(--ink-2);display:flex;justify-content:space-between;gap:6px}
+.photos figcaption span{font-family:var(--f-mono);font-weight:500}
+.photos .photo{padding:10px;gap:4px}
+.photos .photo.has{padding:0}
+.photos .photo svg{width:30px;height:30px}
+.photos .photo b{font-size:.8rem}
+.photos figure.wide{grid-column:1/-1}
+.timeline{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.timeline li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:start;padding-bottom:12px;position:relative}
+.timeline li:not(:last-child)::after{content:"";position:absolute;left:12px;top:24px;bottom:0;width:2px;background:var(--line)}
+.timeline li.done:not(:last-child)::after{background:var(--sky)}
+.timeline .dot{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:.75rem;font-weight:700;background:var(--surface-2);color:var(--ink-2);border:1.5px solid var(--line);font-family:var(--f-mono)}
+.timeline li.done .dot{background:var(--sky);border-color:var(--sky);color:#04213a}
+.timeline li.bad .dot{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.timeline .lbl{font-weight:600}
+.timeline .sub{font-size:.8rem;color:var(--ink-2)}
+.timeline .when{font-family:var(--f-mono);font-size:.82rem;color:var(--ink-2)}
+.dlg-note{font-size:.8rem;color:var(--ink-2);margin:0}
+.rack-row.cur .cell{border-color:var(--blue)}
+.cell.spin{animation:spin .9s ease-in-out}
+@keyframes spin{0%{transform:scale(1)}40%{transform:scale(1.12);background:var(--sky)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.cell.spin{animation:none;outline:2px solid var(--sky)}}
+.rack-base{height:10px;background:var(--ink);border-radius:0 0 8px 8px;margin-left:67px;opacity:.85}
+
+/* admin */
+.grid-admin{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+@media (max-width:860px){.grid-admin{grid-template-columns:minmax(0,1fr)}}
+.stat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.stat div{background:var(--surface-2);border-radius:8px;padding:10px}
+.stat small{display:block;color:var(--ink-2);font-size:.75rem}
+.stat b{font-family:var(--f-mono);font-size:1rem}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:.8rem;font-weight:600;background:var(--surface-2)}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ink-2)}
+.pill.ok{color:var(--ok)} .pill.ok::before{background:var(--ok)}
+.pill.sim{color:var(--yellow-ink);background:var(--yellow)} .pill.sim::before{background:var(--yellow-ink)}
+pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font-family:var(--f-mono);font-size:.78rem;max-height:300px;overflow:auto;margin:10px 0 0}
+:root[data-theme="dark"] pre.json{background:#03060c}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) pre.json{background:#03060c}}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px}
+.row .field{flex:1;min-width:120px}
+.log{margin-top:10px;font-family:var(--f-mono);font-size:.78rem;max-height:190px;overflow:auto;background:var(--surface-2);border-radius:8px;padding:8px 10px;display:grid;gap:3px}
+.parts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.parts span{font-size:.8rem;border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+
+/* live 3d */
+.grid-live{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:18px;align-items:start}
+@media (max-width:960px){.grid-live{grid-template-columns:minmax(0,1fr)}}
+.side{display:grid;gap:18px;min-width:0}
+.stage-panel{padding:0;overflow:hidden}
+.stage{position:relative;height:560px;background:radial-gradient(ellipse at 50% 30%,var(--sky-soft),var(--surface) 70%)}
+@media (max-width:600px){.stage{height:380px}}
+.stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.stage-hud{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;gap:8px;pointer-events:none;flex-wrap:wrap}
+.hud-now{background:var(--ink);color:#fff;border-radius:6px;padding:3px 10px;font-size:.85rem}
+.stage-hint{position:absolute;bottom:10px;left:12px;font-size:.78rem;color:var(--ink-2);pointer-events:none}
+.map-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.map-grid .field select{font-size:.82rem;padding:.4rem .5rem}
+
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:.6rem 1rem;border-radius:8px;font-size:.9rem;z-index:20;max-width:calc(100% - 32px)}
+:root[data-theme="dark"] #toast{background:var(--surface-2);color:var(--ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #toast{background:var(--surface-2);color:var(--ink)}}
+</style>
+
+<!-- ================= AUTH ================= -->
+<section id="auth" class="wrap">
+ <div class="auth-shell">
+  <aside class="auth-hero">
+    <span class="cap c1" aria-hidden="true"></span>
+    <span class="cap c2" aria-hidden="true"></span>
+    <span class="cap c3" aria-hidden="true"></span>
+    <div class="blister" id="rackMini" aria-hidden="true"></div>
+    <img class="logo" src="logo.png" alt="ตราโรงเรียนจุฬาภรณราชวิทยาลัย สุราษฎร์ธานี">
+    <h1>เครื่อง<em>จ่ายยา</em></h1>
+    <p>ตั้งเวลากินยาล่วงหน้าได้ 7 วัน วันละ 6 มื้อ เครื่องจะหมุนถาดยาให้ตรงเวลา และดูการทำงานแบบ 3D ได้ทันที</p>
+    <ul class="hero-facts">
+      <li><b>7</b>ชั้น</li><li><b>42</b>ช่องยา</li><li><b>3D</b>เรียลไทม์</li>
+    </ul>
+  </aside>
+  <div class="auth-card">
+    <div class="eyebrow">ยินดีต้อนรับ</div>
+    <h2 id="authTitle">เข้าสู่ระบบ</h2>
+
+    <form id="loginForm" class="auth-body" novalidate>
+      <div class="field"><label for="loginName">ชื่อผู้ใช้</label><input id="loginName" autocomplete="username" placeholder="เช่น somchai"></div>
+      <div class="field"><label for="loginPass">รหัสผ่าน</label><input id="loginPass" type="password" autocomplete="current-password" placeholder="••••••"></div>
+      <div class="err" id="loginErr"></div>
+      <button class="btn" type="submit">เข้าสู่ระบบ</button>
+      <button class="btn ghost" type="button" id="demoBtn">ลองใช้บัญชีตัวอย่าง</button>
+      <div class="auth-switch">ยังไม่มีบัญชี? <button type="button" class="link" id="toRegister">สมัครสมาชิก</button></div>
+    </form>
+
+    <form id="regForm" class="auth-body" novalidate hidden>
+      <div class="field"><label for="regName">ชื่อผู้ใช้</label><input id="regName" autocomplete="username" placeholder="ตั้งชื่อผู้ใช้"></div>
+      <div class="field"><label for="regPass">รหัสผ่าน</label><input id="regPass" type="password" autocomplete="new-password" placeholder="อย่างน้อย 4 ตัวอักษร"></div>
+      <div class="field"><label for="regPass2">ยืนยันรหัสผ่าน</label><input id="regPass2" type="password" autocomplete="new-password" placeholder="พิมพ์รหัสผ่านอีกครั้ง"></div>
+      <div class="err" id="regErr"></div>
+      <button class="btn y" type="submit">สมัครสมาชิก</button>
+      <div class="auth-switch">มีบัญชีแล้ว? <button type="button" class="link" id="toLogin">เข้าสู่ระบบ</button></div>
+    </form>
+  </div>
+ </div>
+</section>
+
+<!-- ================= APP ================= -->
+<div id="app" hidden>
+  <header class="top">
+    <div class="wrap top-in">
+      <div class="brand"><img src="logo.png" alt=""><span>เครื่องจ่ายยา<small>7 ชั้น · 42 ช่องยา</small></span></div>
+      <nav class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tabUse" aria-selected="true" aria-controls="viewUse">START</button>
+        <button class="tab" role="tab" id="tabLive" aria-selected="false" aria-controls="viewLive">3D Monitor</button>
+        <button class="tab" role="tab" id="tabAdmin" aria-selected="false" aria-controls="viewAdmin">SETTING</button>
+      </nav>
+      <div class="user"><span id="whoami"></span><button class="btn ghost sm" id="logoutBtn">ออกจากระบบ</button></div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- ---------- USE ---------- -->
+    <section id="viewUse" role="tabpanel" aria-labelledby="tabUse">
+      <div class="grid-use">
+        <div class="panel">
+          <h2>เลือกวัน</h2>
+          <div class="muted" style="font-size:.88rem">แตะวันในปฏิทินเพื่อเลือก ได้สูงสุด 7 วัน (1 วัน = 1 ชั้น · เลขชั้นของแต่ละวันคงที่จนกว่าจะผ่านวันนั้นไป)</div>
+          <div class="cal-head">
+            <button class="btn ghost sm" id="prevM" aria-label="เดือนก่อน">‹</button>
+            <strong id="monthLabel"></strong>
+            <button class="btn ghost sm" id="nextM" aria-label="เดือนถัดไป">›</button>
+          </div>
+          <div class="cal" id="cal"></div>
+          <div class="count" id="countBar"></div>
+        </div>
+
+        <div class="panel">
+          <h2>ตั้งเวลาแต่ละช่อง</h2>
+          <div class="chips" id="chips"></div>
+          <div id="editor"></div>
+        </div>
+      </div>
+
+      <div class="panel rack-wrap">
+        <h2>ภาพรวมเครื่อง</h2>
+        <div class="muted" style="font-size:.88rem">แตะช่องเพื่อดูสถานะการรับยาและภาพจากกล้อง · แถวขอบน้ำเงิน = วันที่กำลังแก้ไข</div>
+        <div class="legend">
+          <span><i class="lw"></i>รอถึงเวลา</span><span><i class="lr"></i>จ่ายแล้ว รอรับยา</span>
+          <span><i class="lt"></i>รับยาแล้ว</span><span><i class="lm"></i>ไม่ได้รับยา</span><span><i></i>ไม่ได้ตั้งเวลา</span>
+        </div>
+        <div class="rack" id="rack"></div>
+        <div class="rack-base"></div>
+      </div>
+    </section>
+
+    <!-- ---------- LIVE 3D ---------- -->
+    <section id="viewLive" role="tabpanel" aria-labelledby="tabLive" hidden>
+      <div class="grid-live">
+        <div class="panel stage-panel">
+          <div class="stage" id="stage">
+            <div class="stage-hud">
+              <span class="pill sim" id="livePill">โหมดจำลอง</span>
+              <span class="hud-now mono" id="hudNow">ชั้น 1 · ช่อง 1</span>
+            </div>
+            <div class="stage-hint">ลากเพื่อหมุนมุมมอง · ล้อเมาส์/สองนิ้วเพื่อซูม</div>
+          </div>
+        </div>
+
+        <div class="side">
+          <div class="panel">
+            <h2>สถานะตอนนี้</h2>
+            <div class="stat">
+              <div><small>ตัวดันยาอยู่ชั้น</small><b id="lvFloor">1</b></div>
+              <div><small>ช่องที่ตรงตัวดัน</small><b id="lvSlot">1</b></div>
+              <div><small>สถานะ</small><b id="lvState">พร้อม</b></div>
+            </div>
+            <div class="row">
+              <div class="field"><label for="lvF">ชั้น</label><select id="lvF"></select></div>
+              <div class="field"><label for="lvS">ช่อง</label><select id="lvS"></select></div>
+              <button class="btn y" id="lvGo">หมุนไปช่องนี้</button>
+            </div>
+            <div class="row">
+              <button class="btn ghost" id="lvPlay">▶ จำลองจ่ายตามตาราง</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>โมเดลจาก Onshape</h2>
+            <div class="muted" style="font-size:.88rem">แสดงไฟล์ Assembly 2 ของคุณอยู่ · อัปเดตแบบใหม่ได้ด้วยไฟล์ .glb หรือ .stl</div>
+            <div class="row">
+              <label class="btn" for="modelFile" style="display:inline-block">เลือกไฟล์ 3D</label>
+              <input type="file" id="modelFile" accept=".glb,.gltf,.stl" hidden>
+              <button class="btn ghost" id="uprightBtn" hidden>หมุนให้ตั้งตรง</button>
+              <button class="btn ghost" id="demoModelBtn" hidden>ใช้โมเดลจำลอง</button>
+              <button class="btn ghost" id="realModelBtn" hidden>ใช้โมเดลเครื่องจริง</button>
+            </div>
+            <div class="muted mono" id="modelInfo" style="font-size:.8rem;margin-top:8px">กำลังโหลดโมเดลเครื่องจริง…</div>
+            <div id="mapBox" hidden>
+              <h3 style="font-size:.95rem;margin-top:14px">ชิ้นส่วนถาดยา (หมุนพร้อมกันทั้งแท่ง)</h3><div class="muted" style="font-size:.8rem">ชุดตัวดันยาจับจากชื่อชิ้นส่วนที่ขึ้นต้นด้วย pusher</div>
+              <div class="row">
+                <div class="field"><label for="axisSel">แกนหมุน</label><select id="axisSel"><option value="y">แกน Y</option><option value="z">แกน Z</option><option value="x">แกน X</option></select></div>
+              </div>
+              <div class="map-grid" id="mapGrid"></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>เชื่อมต่อเครื่องจริง</h2>
+            <div class="muted" style="font-size:.88rem">ESP32 ส่งข้อความแบบนี้ผ่าน WebSocket ทุกครั้งที่มอเตอร์หมุน</div>
+            <pre class="json">{"floor": 3, "slot": 4, "state": "moving"}
+{"floor": 3, "slot": 4, "state": "ready"}</pre>
+            <div class="row">
+              <div class="field"><label for="liveAddr">ที่อยู่ ESP32</label><input id="liveAddr" class="mono" value="ws://192.168.1.50:81"></div>
+              <button class="btn" id="liveConnect">เชื่อมต่อ</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- ADMIN ---------- -->
+    <section id="viewAdmin" role="tabpanel" aria-labelledby="tabAdmin" hidden>
+      <div class="grid-admin">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <h2>สถานะเครื่อง</h2><span class="pill sim" id="connPill">โหมดจำลอง</span>
+          </div>
+          <div class="stat">
+            <div><small>เวลาเครื่อง (RTC DS3231)</small><b id="rtc">--:--:--</b></div>
+            <div><small>ช่องที่ตั้งไว้</small><b id="statSlots">0 / 42</b></div>
+            <div><small>รอบถัดไป</small><b id="statNext">—</b></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="espAddr">ที่อยู่ ESP32 (WebSocket)</label><input id="espAddr" class="mono" value="ws://192.168.1.50:81"></div>
+            <button class="btn" id="connectBtn">ทดสอบเชื่อมต่อ</button>
+          </div>
+          <p class="muted" style="font-size:.82rem;margin:.6rem 0 0">ดูที่อยู่ได้จากจอ OLED หรือ Serial Monitor ของ ESP32 · เปิดเว็บนี้จากคอมที่ใช้ Wi‑Fi เดียวกับเครื่องจึงจะเชื่อมต่อได้</p>
+        </div>
+
+        <div class="panel">
+          <h2>ทดสอบมอเตอร์</h2>
+          <div class="muted" style="font-size:.88rem">หมุนถาดทั้งแท่งให้ช่องที่เลือกตรงตัวดัน แล้วเลื่อนตัวดันยาไปที่ชั้นที่เลือก</div>
+          <div class="row">
+            <div class="field"><label for="tFloor">ชั้น</label><select id="tFloor"></select></div>
+            <div class="field"><label for="tSlot">ช่อง</label><select id="tSlot"></select></div>
+            <button class="btn y" id="spinBtn">สั่งหมุน</button>
+            <button class="btn" id="pushBtn">หมุนและดันยา</button>
+          </div>
+          <div class="log" id="log"></div>
+        </div>
+
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <h2>ข้อมูลที่จะส่งให้ ESP32</h2><button class="btn ghost sm" id="copyJson">คัดลอก JSON</button>
+          </div>
+          <div class="muted" style="font-size:.88rem">รูปแบบตารางเวลาที่ ESP32 จะอ่าน (อัปเดตทุกครั้งที่บันทึก)</div>
+          <pre class="json" id="json"></pre>
+        </div>
+
+        <div class="panel">
+          <h2>อุปกรณ์ในโปรเจกต์</h2>
+          <div class="parts">
+            <span>ESP32</span><span>ESP32‑S3 CAM</span><span>L298N</span><span>TT motor</span><span>จอ OLED</span><span>Joystick</span><span>RTC DS3231</span><span>เซนเซอร์แสง</span><span>18650 + รางถ่าน</span><span>PETG / อะคริลิก</span>
+          </div>
+          <p class="muted" style="font-size:.85rem;margin:.8rem 0 0">ส่วนต่อไปที่เพิ่มได้: โมเดล 3D จาก Onshape ที่ขยับตามเครื่องจริง, ภาพสดจาก ESP32‑S3 CAM, ค่าเซนเซอร์แสง</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog class="slot-dlg" id="slotDlg" aria-labelledby="dlgTitle">
+  <div class="dlg-head">
+    <div><div class="eyebrow" id="dlgDate"></div><h3 id="dlgTitle"></h3></div>
+    <button class="btn ghost sm" id="dlgClose" aria-label="ปิด">✕</button>
+  </div>
+  <div class="dlg-body">
+    <span class="status-big" id="dlgStatus"></span>
+    <div class="photos" id="dlgPhoto"></div>
+    <ol class="timeline" id="dlgTimeline"></ol>
+    <div class="row" style="margin-top:0">
+      <button class="btn" id="dlgCapture">ถ่ายภาพจากกล้อง</button>
+      <button class="btn ghost" id="dlgTaken"></button>
+    </div>
+    <p class="dlg-note">สถานะ “รับยาแล้ว” จะอัปเดตเองเมื่อติดตั้งเซนเซอร์ที่ช่องรับยา ระหว่างนี้กดปุ่มเพื่อบันทึกเองได้</p>
+  </div>
+</dialog>
+
+<div id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/STLLoader.js"></script>
+<script>
+(function(){
+const FLOORS=7, SLOTS=6, MAXDAYS=7;
+const DEFAULT_TIMES=["07:00","09:00","12:00","15:00","18:00","21:00"];
+const TH_M=["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+const TH_MS=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+const TH_W=["อา","จ","อ","พ","พฤ","ศ","ส"];
+const $=id=>document.getElementById(id);
+
+/* ---------- storage (per-browser, prototype) ---------- */
+const mem={};
+function load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return k in mem?mem[k]:d}}
+function save(k,v){mem[k]=v;try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+
+async function hash(s){
+  try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("pill7:"+s));
+    return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+  catch(e){let h=5381;for(const c of s)h=(h*33)^c.charCodeAt(0);return "f"+(h>>>0).toString(16)}
+}
+
+/* ---------- toast ---------- */
+let tT;function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tT);tT=setTimeout(()=>t.hidden=true,2400)}
+
+/* ---------- auth ---------- */
+const mini=$("rackMini");for(let i=0;i<42;i++){const e=document.createElement("i");if([2,5,9,14,20,27,33,40].includes(i))e.className="on";mini.appendChild(e)}
+function showReg(on){$("loginForm").hidden=on;$("regForm").hidden=!on;$("authTitle").textContent=on?"สมัครสมาชิก":"เข้าสู่ระบบ";$("loginErr").textContent=$("regErr").textContent="";(on?$("regName"):$("loginName")).focus()}
+$("toRegister").onclick=()=>showReg(true);
+$("toLogin").onclick=()=>showReg(false);
+
+$("regForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const n=$("regName").value.trim(),p=$("regPass").value,p2=$("regPass2").value,err=$("regErr");
+  if(!n) return err.textContent="กรุณาใส่ชื่อผู้ใช้";
+  if(p.length<4) return err.textContent="รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร";
+  if(p!==p2) return err.textContent="รหัสผ่านทั้งสองช่องไม่ตรงกัน";
+  const users=load("p7_users",{});
+  if(users[n.toLowerCase()]) return err.textContent="ชื่อนี้มีคนใช้แล้ว ลองชื่ออื่น";
+  users[n.toLowerCase()]={name:n,pass:await hash(p)};save("p7_users",users);
+  $("regForm").reset();toast("สมัครสำเร็จ เข้าสู่ระบบแล้ว");enter(n);
+});
+$("loginForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const n=$("loginName").value.trim(),p=$("loginPass").value,err=$("loginErr");
+  if(!n||!p) return err.textContent="กรุณาใส่ชื่อผู้ใช้และรหัสผ่าน";
+  const u=load("p7_users",{})[n.toLowerCase()];
+  if(!u) return err.textContent="ไม่พบชื่อผู้ใช้นี้ กด “สมัครสมาชิก” ด้านล่างเพื่อสร้างบัญชี";
+  if(u.pass!==await hash(p)) return err.textContent="รหัสผ่านไม่ถูกต้อง";
+  $("loginForm").reset();enter(u.name);
+});
+$("demoBtn").onclick=()=>{
+  const key="sched_ตัวอย่าง";
+  if(!load(key,null)){
+    const s={},t=new Date();
+    const pat=[[1,0,1,0,1,0],[1,0,1,0,1,0],[1,1,1,1,1,1],[1,0,0,0,1,0]];
+    pat.forEach((p,i)=>{const d=new Date(t);d.setDate(t.getDate()+i);s[iso(d)]=p.map((on,j)=>({on:!!on,time:DEFAULT_TIMES[j]}))});
+    save(key,s);
+  }
+  // ตัวอย่างสถานะ: มื้อแรกของวันนี้ที่เลยเวลาแล้ว ให้แสดงว่ารับยาแล้ว
+  const s=load(key,{}),k=iso(new Date());
+  if(s[k]&&!s[k].some(x=>x.taken)){const i=s[k].findIndex(x=>x.on&&new Date(k+"T"+x.time)<new Date());
+    if(i>=0){const t=new Date(k+"T"+s[k][i].time);t.setMinutes(t.getMinutes()+4);s[k][i].taken=t.toISOString();save(key,s)}}
+  enter("ตัวอย่าง");
+};
+
+/* ---------- app state ---------- */
+let user=null,sched={},fmap={},view=new Date(),active=null;   // fmap: วันที่ -> เลขชั้น (คงที่ ไม่เลื่อนเมื่อข้ามวัน)
+function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function todayISO(){return iso(new Date())}
+function sortedDays(){return Object.keys(sched).sort()}
+function floorOf(k){return fmap[k]||0}
+function dayOfFloor(f){for(const k in fmap)if(fmap[k]===f&&sched[k])return k;return null}
+function freeFloor(){const used=new Set(Object.keys(sched).map(k=>fmap[k]));for(let f=1;f<=FLOORS;f++)if(!used.has(f))return f;return 0}
+// ให้ทุกวันมีเลขชั้นของตัวเอง: วันที่มีอยู่แล้วคงเลขเดิม วันใหม่ได้ชั้นว่างที่เลขน้อยสุด
+function ensureFloors(){
+  for(const k of Object.keys(fmap))if(!sched[k])delete fmap[k];
+  const seen=new Set();
+  for(const k of sortedDays()){const f=fmap[k];if(!(f>=1&&f<=FLOORS)||seen.has(f))delete fmap[k];else seen.add(f)}
+  for(const k of sortedDays())if(!fmap[k])fmap[k]=freeFloor();
+}
+function fmt(k){const [y,m,d]=k.split("-").map(Number);return d+" "+TH_MS[m-1]}
+
+function enter(name){
+  user=name;save("p7_session",name);
+  sched=load("sched_"+name,{});
+  fmap=load("floors_"+name,null);
+  // ผู้ใช้เดิมที่ยังไม่มีการจำเลขชั้น: ใช้ลำดับเดิม (เรียงตามวันที่ รวมวันที่ผ่านไปแล้ว) เพื่อให้ตรงกับยาที่ใส่ไว้
+  if(!fmap){fmap={};sortedDays().forEach((k,i)=>{if(i<FLOORS)fmap[k]=i+1})}
+  // drop days in the past (ชั้นของวันนั้นว่างแล้ว ใส่ยาวันใหม่ได้ แต่ชั้นของวันอื่นไม่เลื่อน)
+  const t=todayISO();for(const k of Object.keys(sched)) if(k<t) delete sched[k];
+  ensureFloors();save("floors_"+name,fmap);
+  active=sortedDays()[0]||null;
+  view=new Date();
+  $("auth").hidden=true;$("app").hidden=false;$("whoami").textContent=name;
+  renderAll();
+}
+$("logoutBtn").onclick=()=>{save("p7_session",null);user=null;$("app").hidden=true;$("auth").hidden=false;showReg(false)};
+function persist(){ensureFloors();save("sched_"+user,sched);save("floors_"+user,fmap);renderJson();renderStats();refreshCells()}
+
+/* ---------- tabs ---------- */
+function setTab(a){
+  [["use","tabUse","viewUse"],["live","tabLive","viewLive"],["admin","tabAdmin","viewAdmin"]].forEach(([k,t,v])=>{$(t).setAttribute("aria-selected",a===k);$(v).hidden=a!==k});
+  if(a==="live"){initLive();refreshCells()}
+}
+$("tabUse").onclick=()=>setTab("use");$("tabLive").onclick=()=>setTab("live");$("tabAdmin").onclick=()=>setTab("admin");
+
+/* ---------- calendar ---------- */
+$("prevM").onclick=()=>{view.setMonth(view.getMonth()-1);renderCal()};
+$("nextM").onclick=()=>{view.setMonth(view.getMonth()+1);renderCal()};
+function renderCal(){
+  const y=view.getFullYear(),m=view.getMonth();view.setDate(1);
+  $("monthLabel").textContent=TH_M[m]+" "+(y+543);
+  const cal=$("cal");cal.innerHTML="";
+  TH_W.forEach(w=>{const e=document.createElement("div");e.className="wd";e.textContent=w;cal.appendChild(e)});
+  const first=new Date(y,m,1).getDay(),n=new Date(y,m+1,0).getDate(),t=todayISO();
+  for(let i=0;i<first;i++)cal.appendChild(document.createElement("div"));
+  for(let d=1;d<=n;d++){
+    const k=iso(new Date(y,m,d)),b=document.createElement("button");
+    b.className="day";b.textContent=d;
+    if(k<t)b.disabled=true;
+    if(k===t)b.classList.add("today");
+    if(sched[k]){b.classList.add("sel");if(k===active)b.classList.add("active");
+      const f=document.createElement("span");f.className="fl";f.textContent="ช"+floorOf(k);b.appendChild(f)}
+    b.setAttribute("aria-label",d+" "+TH_M[m]+(sched[k]?" เลือกแล้ว ชั้น "+floorOf(k):""));
+    b.onclick=()=>toggleDay(k);
+    cal.appendChild(b);
+  }
+  const cb=$("countBar");cb.innerHTML="";const c=sortedDays().length;
+  for(let i=0;i<MAXDAYS;i++){const e=document.createElement("i");if(i<c)e.className="on";cb.appendChild(e)}
+  const s=document.createElement("span");s.className="mono";s.textContent=" "+c+"/7";cb.appendChild(s);
+}
+function toggleDay(k){
+  if(sched[k]){
+    if(active!==k){active=k;renderAll();return}
+    delete sched[k];delete fmap[k];active=sortedDays()[0]||null;persist();renderAll();toast("ยกเลิกวันที่ "+fmt(k));return;
+  }
+  if(sortedDays().length>=MAXDAYS){toast("เลือกได้สูงสุด 7 วัน (เครื่องมี 7 ชั้น)");return}
+  sched[k]=DEFAULT_TIMES.map(t=>({on:false,time:t}));fmap[k]=freeFloor();active=k;persist();renderAll();toast("วันที่ "+fmt(k)+" ใช้ชั้น "+fmap[k]+" · ใส่ยาของวันนี้ในชั้น "+fmap[k])
+}
+
+/* ---------- editor ---------- */
+function renderChips(){
+  const c=$("chips");c.innerHTML="";
+  sortedDays().forEach(k=>{
+    const b=document.createElement("button");b.className="chip";b.setAttribute("aria-pressed",k===active);
+    const n=sched[k].filter(s=>s.on).length;
+    b.innerHTML='<span class="f">ชั้น '+floorOf(k)+'</span>'+fmt(k)+' <span class="muted mono" style="font-size:.78rem">'+n+'/6</span>';
+    b.onclick=()=>{active=k;renderAll()};c.appendChild(b);
+  });
+}
+function renderEditor(){
+  const ed=$("editor");
+  if(!active){ed.innerHTML='<div class="empty">ยังไม่ได้เลือกวัน<br>แตะวันในปฏิทินด้านซ้ายเพื่อเริ่มตั้งเวลา</div>';return}
+  const [y,m,d]=active.split("-").map(Number),wd=new Date(y,m-1,d).getDay();
+  const s=sched[active];
+  ed.innerHTML='<div class="editor-head"><div><div class="muted" style="font-size:.85rem">วัน'+["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"][wd]+'</div><h3><span class="floor-tag">ชั้น '+floorOf(active)+'</span>'+d+" "+TH_M[m-1]+" "+(y+543)+'</h3></div><div class="muted mono" style="font-size:.85rem">เปิดใช้ '+s.filter(x=>x.on).length+' / 6 ช่อง</div></div>';
+  const g=document.createElement("div");g.className="slots";
+  s.forEach((sl,i)=>{
+    const card=document.createElement("div");card.className="slot"+(sl.on?" on":"");
+    card.innerHTML='<div class="slot-top"><span>ช่อง '+(i+1)+'</span><label class="sw"><input type="checkbox" id="sw'+i+'" aria-label="เปิดช่อง '+(i+1)+'" '+(sl.on?"checked":"")+'><span></span></label></div><input type="time" id="tm'+i+'" value="'+sl.time+'" aria-label="เวลาช่อง '+(i+1)+'" '+(sl.on?"":"disabled")+'>';
+    card.querySelector("input[type=checkbox]").onchange=e=>{sl.on=e.target.checked;persist();renderAll()};
+    card.querySelector("input[type=time]").onchange=e=>{sl.time=e.target.value||sl.time;persist();renderRack();renderChips()};
+    g.appendChild(card);
+  });
+  ed.appendChild(g);
+  const p=document.createElement("div");p.className="presets";
+  p.innerHTML='<span class="muted">ตั้งด่วน:</span>';
+  [["เช้า‑กลางวัน‑เย็น",[1,0,1,0,1,0]],["ทุกช่อง",[1,1,1,1,1,1]],["ล้างทั้งหมด",[0,0,0,0,0,0]]].forEach(([l,pat])=>{
+    const b=document.createElement("button");b.className="btn ghost sm";b.textContent=l;
+    b.onclick=()=>{s.forEach((x,i)=>x.on=!!pat[i]);persist();renderAll()};p.appendChild(b)});
+  const cp=document.createElement("button");cp.className="btn ghost sm";cp.textContent="คัดลอกไปทุกวัน";
+  cp.onclick=()=>{for(const k of sortedDays()) if(k!==active) sched[k]=s.map(x=>({...x}));persist();renderAll();toast("คัดลอกเวลาไปทุกวันที่เลือกแล้ว")};
+  p.appendChild(cp);ed.appendChild(p);
+  const a=document.createElement("div");a.className="actions";
+  a.innerHTML='<button class="btn" id="sendBtn">บันทึกและส่งไปที่เครื่อง</button>';
+  ed.appendChild(a);
+  $("sendBtn").onclick=()=>{persist();
+    if(sendCmd({cmd:"schedule",data:payload()})){addLog("ส่งตารางเวลา "+sortedDays().length+" วัน ไปยัง ESP32");toast("บันทึกแล้ว · ส่งตารางเวลาไปที่เครื่องแล้ว")}
+    else{addLog("บันทึกตารางเวลา "+sortedDays().length+" วัน (ยังไม่ได้เชื่อมต่อเครื่อง)");toast("บันทึกแล้ว · จะส่งให้เครื่องอัตโนมัติเมื่อเชื่อมต่อ")}};
+}
+
+/* ---------- rack ---------- */
+function renderRack(){
+  const r=$("rack");r.innerHTML="";
+  for(let f=FLOORS;f>=1;f--){
+    const k=dayOfFloor(f),row=document.createElement("div");row.className="rack-row"+(k&&k===active?" cur":"");
+    const lab=document.createElement("div");lab.className="lab";lab.textContent="ชั้น "+f+(k?" · "+fmt(k):"");
+    if(k){lab.innerHTML="ชั้น "+f+"<br><span style='font-size:.7rem'>"+fmt(k)+"</span>"}
+    row.appendChild(lab);
+    for(let s=0;s<SLOTS;s++){
+      const c=document.createElement("button");c.className="cell";c.id="cell-"+f+"-"+(s+1);
+      if(!k){c.disabled=true;c.innerHTML='<span class="t">'+(s+1)+'</span>';c.setAttribute("aria-label","ชั้น "+f+" ช่อง "+(s+1)+" ยังไม่ได้เลือกวัน");row.appendChild(c);continue}
+      const sl=sched[k][s],st=slotStatus(k,s);
+      c.classList.add("st-"+st);
+      c.innerHTML='<span class="t">'+(sl.on?sl.time:String(s+1))+'</span><span class="st">'+ST_SHORT[st]+'</span>'+
+        (photos[photoKey(k,s)]?'<svg class="cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>':"");
+      c.setAttribute("aria-label","ชั้น "+f+" ช่อง "+(s+1)+" "+(sl.on?"เวลา "+sl.time+" ":"")+ST_LONG[st]);
+      c.onclick=()=>openSlot(k,s);
+      row.appendChild(c);
+    }
+    r.appendChild(row);
+  }
+}
+
+/* ---------- slot status & detail ---------- */
+const ST_SHORT={off:"—",wait:"รอเวลา",ready:"รอรับยา",taken:"✓ รับแล้ว",missed:"ไม่ได้รับ"};
+const ST_LONG={off:"ไม่ได้ตั้งเวลา",wait:"รอถึงเวลาจ่ายยา",ready:"จ่ายยาแล้ว · รอรับยา",taken:"รับยาแล้ว",missed:"ไม่ได้รับยา"};
+const photos={};               // ภาพจาก ESP32-S3 CAM เก็บไว้ระหว่างเปิดหน้าเว็บ
+function photoKey(k,s){return k+"#"+s}
+function dueOf(k,s){return new Date(k+"T"+sched[k][s].time)}
+function slotStatus(k,s){
+  const sl=sched[k][s];
+  if(!sl.on)return "off";
+  if(sl.taken)return "taken";
+  const d=Date.now()-dueOf(k,s);
+  if(d<0)return "wait";
+  return d>3600e3?"missed":"ready";
+}
+function hm(d){return d.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",hour12:false})}
+let dlgSlot=null;
+function openSlot(k,s){dlgSlot={k,s};renderSlot();const d=$("slotDlg");if(!d.open)d.showModal()}
+function renderSlot(){
+  if(!dlgSlot)return;
+  const {k,s}=dlgSlot;if(!sched[k]){$("slotDlg").close();return}
+  const sl=sched[k][s],st=slotStatus(k,s),f=floorOf(k);
+  const [y,m,d]=k.split("-").map(Number),wd=new Date(y,m-1,d).getDay();
+  $("dlgDate").textContent="วัน"+["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"][wd]+" "+d+" "+TH_M[m-1]+" "+(y+543);
+  $("dlgTitle").textContent="ชั้น "+f+" · ช่อง "+(s+1)+(sl.on?" · "+sl.time+" น.":"");
+  const sb=$("dlgStatus");sb.className="status-big "+st;sb.textContent=ST_LONG[st];
+  const ph=photos[photoKey(k,s)]||{},box=$("dlgPhoto");box.innerHTML="";
+  const shots=[["dispensed","ตอนจ่ายยา","ถ่ายเมื่อยาลงถาด"],["taken","หลังรับยา","ถ่ายเมื่อหยิบยาออก"]];
+  if(ph.manual)shots.push(["manual","ภาพจากปุ่มถ่ายภาพ",""]);
+  shots.forEach(([key,cap,empty])=>{
+    const p=ph[key],fig=document.createElement("figure");if(key==="manual")fig.className="wide";
+    const fc=document.createElement("figcaption");fc.textContent=cap;
+    if(p){const t=document.createElement("span");t.textContent=hm(new Date(p.at));fc.appendChild(t)}
+    const div=document.createElement("div");
+    if(p){div.className="photo has";const img=document.createElement("img");img.alt=cap+" ชั้น "+f+" ช่อง "+(s+1);img.src=p.src;div.appendChild(img)}
+    else{div.className="photo";div.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>ยังไม่มีภาพ</b><span style="font-size:.75rem">'+empty+'</span>'}
+    fig.append(fc,div);box.appendChild(fig);
+  });
+  const due=sl.on?dueOf(k,s):null,now=new Date();
+  const steps=[
+    {lbl:"ตั้งเวลา",sub:sl.on?"กำหนดจ่ายยา "+sl.time+" น.":"ช่องนี้ยังไม่ได้ตั้งเวลา",when:"",cls:sl.on?"done":""},
+    {lbl:"เครื่องจ่ายยา",sub:"หมุนถาดมาที่ช่องทางออก",when:due?hm(due):"",cls:due&&now>=due?"done":""},
+    {lbl:"รับยา",sub:sl.taken?"ตรวจพบว่ารับยาแล้ว":st==="missed"?"ไม่ได้รับยา":"รอเซนเซอร์ตรวจจับการรับยา",
+      when:sl.taken?hm(new Date(sl.taken)):"",cls:sl.taken?"done":st==="missed"?"bad":""}
+  ];
+  $("dlgTimeline").innerHTML=steps.map((x,i)=>'<li class="'+x.cls+'"><span class="dot">'+(x.cls==="done"?"✓":x.cls==="bad"?"!":i+1)+'</span><div><div class="lbl">'+x.lbl+'</div><div class="sub">'+x.sub+'</div></div><span class="when">'+x.when+'</span></li>').join("");
+  const tb=$("dlgTaken");tb.hidden=!sl.on;tb.textContent=sl.taken?"ยกเลิกสถานะรับยา":"บันทึกว่ารับยาแล้ว";
+}
+$("dlgClose").onclick=()=>$("slotDlg").close();
+$("slotDlg").addEventListener("click",e=>{if(e.target===e.currentTarget)$("slotDlg").close()});
+$("slotDlg").addEventListener("close",()=>dlgSlot=null);
+$("dlgTaken").onclick=()=>{
+  const {k,s}=dlgSlot,sl=sched[k][s];
+  sl.taken=sl.taken?null:new Date().toISOString();
+  persist();renderRack();renderSlot();
+  toast(sl.taken?"บันทึกแล้ว: รับยาชั้น "+floorOf(k)+" ช่อง "+(s+1):"ยกเลิกสถานะรับยาแล้ว");
+};
+$("dlgCapture").onclick=()=>{
+  const {k,s}=dlgSlot,f=floorOf(k);
+  if(sendCmd({cmd:"capture",floor:f,slot:s+1})){addLog("ขอภาพจากกล้อง ชั้น "+f+" ช่อง "+(s+1));toast("ส่งคำสั่งถ่ายภาพแล้ว รอภาพจากกล้อง")}
+  else toast("ยังไม่ได้เชื่อมต่อกล้อง ESP32‑S3 CAM · ตั้งค่าได้ที่แท็บ SETTING");
+};
+function markTaken(f,s,at){const k=dayOfFloor(f);if(!k||!sched[k][s-1])return;sched[k][s-1].taken=at||new Date().toISOString();persist();renderRack();renderSlot()}
+function setPhoto(f,s,src,phase){const k=dayOfFloor(f);if(!k)return;
+  if(!["dispensed","taken","manual"].includes(phase))phase="manual";
+  const key=photoKey(k,s-1);(photos[key]=photos[key]||{})[phase]={src,at:Date.now()};renderRack();renderSlot()}
+setInterval(()=>{if(user&&!$("viewUse").hidden){renderRack();renderSlot()}},60000);
+
+/* ---------- admin ---------- */
+function payload(){
+  return {device:"pill-7x6",user:user,updated:new Date().toISOString(),
+    floors:sortedDays().map(k=>({floor:floorOf(k),date:k,slots:sched[k].map((s,j)=>({slot:j+1,on:s.on,time:s.on?s.time:null}))}))};
+}
+function renderJson(){$("json").textContent=JSON.stringify(payload(),null,2)}
+function renderStats(){
+  let n=0,next=null;const now=new Date(),nk=iso(now),nt=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  for(const k of sortedDays()) for(const s of sched[k]) if(s.on){n++;const key=k+" "+s.time;if(key>nk+" "+nt&&(!next||key<next))next=key}
+  $("statSlots").textContent=n+" / 42";
+  $("statNext").textContent=next?fmt(next.slice(0,10))+" "+next.slice(11):"—";
+}
+const tf=$("tFloor"),ts=$("tSlot");
+for(let i=1;i<=7;i++)tf.add(new Option("ชั้น "+i,i));for(let i=1;i<=6;i++)ts.add(new Option("ช่อง "+i,i));
+function addLog(m){const l=$("log"),d=document.createElement("div"),t=new Date();d.textContent="["+t.toLocaleTimeString("th-TH",{hour12:false})+"] "+m;l.prepend(d)}
+function command(cmd,f,s){
+  const c=$("cell-"+f+"-"+s);if(c){c.classList.remove("spin");void c.offsetWidth;c.classList.add("spin")}
+  const what=cmd==="dispense"?"หมุนและดันยา":"หมุนไป";
+  if(sendCmd({cmd,floor:f,slot:s})){addLog("ส่งคำสั่งไป ESP32: "+what+" ชั้น "+f+" ช่อง "+s);return}
+  goto(f,s);addLog(what+" ชั้น "+f+" ช่อง "+s+" (จำลอง)");
+  if(cmd==="dispense")setTimeout(pushNow,1900);
+}
+$("spinBtn").onclick=()=>{command("goto",+tf.value,+ts.value);toast("สั่งหมุนชั้น "+tf.value+" ช่อง "+ts.value+" แล้ว")};
+$("pushBtn").onclick=()=>{command("dispense",+tf.value,+ts.value);toast("สั่งจ่ายยาชั้น "+tf.value+" ช่อง "+ts.value+" แล้ว")};
+$("connectBtn").onclick=()=>connectESP($("espAddr").value);
+$("espAddr").onchange=e=>{save("p7_esp",e.target.value);$("liveAddr").value=e.target.value};
+$("liveAddr").onchange=e=>{save("p7_esp",e.target.value);$("espAddr").value=e.target.value};
+$("espAddr").value=$("liveAddr").value=load("p7_esp","ws://192.168.1.50:81");
+$("liveConnect").onclick=()=>connectESP($("liveAddr").value);
+
+/* ================= LIVE 3D ================= */
+const STEP=Math.PI/3;
+let L=null;
+/* กลไกจริง: ถาดทั้ง 7 ชั้นหมุนพร้อมกันเป็นแท่งเดียว · ตัวดันยาเลื่อนขึ้นลงตามราง */
+const cur={f:1,s:1},tower={a:0,t:0},carr={f:1,t:1},push={t0:-1e9};
+const CAR_HOME=2, CAR_PITCH=0.031;   // ในไฟล์ Onshape ตัวดันอยู่ระดับชั้น 2 · ระยะห่างชั้น 31 มม.
+const lvF=$("lvF"),lvS=$("lvS");
+for(let i=1;i<=7;i++)lvF.add(new Option("ชั้น "+i,i));for(let i=1;i<=6;i++)lvS.add(new Option("ช่อง "+i,i));
+
+function initLive(){
+  if(L)return;
+  const host=$("stage");
+  if(!window.THREE||!THREE.OrbitControls){host.insertAdjacentHTML("beforeend",'<div class="empty" style="margin:80px 20px">โหลดไลบรารี 3D ไม่สำเร็จ ลองรีเฟรชหน้า</div>');L={};return}
+  const r=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  r.setPixelRatio(Math.min(devicePixelRatio||1,2));host.prepend(r.domElement);
+  const scene=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(38,1,0.01,500);cam.position.set(4.2,3.6,5.4);
+  const ctl=new THREE.OrbitControls(cam,r.domElement);ctl.enableDamping=true;ctl.target.set(0,1.4,0);
+  scene.add(new THREE.HemisphereLight(0xe6f0ff,0x1a2233,0.95));
+  const dl=new THREE.DirectionalLight(0xffffff,0.85);dl.position.set(4,7,5);scene.add(dl);
+  const grid=new THREE.GridHelper(8,32,0x38a9f0,0x38a9f0);grid.material.transparent=true;grid.material.opacity=.16;scene.add(grid);
+  L={r,scene,cam,ctl,host,demo:null,custom:null,nodes:[],map:{},axis:"y",fitScale:1,car:[],arm:null};
+  L.demo=buildDemo();scene.add(L.demo);
+  loadDefaultModel();
+  const fit=()=>{const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;r.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()};
+  new ResizeObserver(fit).observe(host);fit();
+  (function loop(){requestAnimationFrame(loop);if($("viewLive").hidden)return;step();ctl.update();r.render(scene,cam)})();
+}
+
+function buildDemo(){
+  const g=new THREE.Group(),H=0.38,y0=0.28;
+  const mat=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.55,metalness:.05},o||{}));
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.38,0.18,48),mat(0x0d1726));base.position.y=0.09;g.add(base);
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,H*7+0.3,16),mat(0x9aa8bd,{metalness:.6}));pole.position.y=y0+H*3.5;g.add(pole);
+  g.userData.floors=[];
+  for(let f=1;f<=7;f++){
+    const fg=new THREE.Group();fg.position.y=y0+(f-1)*H;
+    fg.add(new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.035,48),mat(0x1546b8)));
+    const cells=[];
+    for(let s=0;s<6;s++){
+      const t=s*STEP;
+      const cell=new THREE.Mesh(new THREE.CylinderGeometry(0.98,0.98,0.05,24,1,false,t-STEP*0.44,STEP*0.88),mat(0xc9d7ea));
+      cell.position.y=0.045;fg.add(cell);cells.push(cell);
+      const wall=new THREE.Mesh(new THREE.BoxGeometry(0.022,0.2,0.92),mat(0xdbe9ff,{transparent:true,opacity:.75}));
+      const tw=t+STEP/2;wall.position.set(Math.sin(tw)*0.53,0.11,Math.cos(tw)*0.53);wall.rotation.y=tw;fg.add(wall);
+    }
+    fg.userData.cells=cells;g.add(fg);g.userData.floors[f]=fg;
+  }
+  const shell=new THREE.Mesh(new THREE.CylinderGeometry(1.16,1.16,H*7+0.12,64,1,true),
+    new THREE.MeshStandardMaterial({color:0x8fd3ff,transparent:true,opacity:.1,side:THREE.DoubleSide,depthWrite:false}));
+  shell.position.y=y0+H*3.5-0.1;g.add(shell);
+  const rail=new THREE.Mesh(new THREE.BoxGeometry(0.12,H*7+0.4,0.08),mat(0x9aa8bd,{metalness:.5}));
+  rail.position.set(0,y0+H*3.5,1.5);g.add(rail);
+  const car=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.24,0.2),mat(0x0d1726));body.position.z=1.38;car.add(body);
+  const arm=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.06,0.34),mat(0xffc928,{emissive:0x332400}));arm.position.set(0,0,1.16);car.add(arm);
+  car.userData={arm,armZ:1.16,y0:y0+0.1,H};g.add(car);g.userData.car=car;
+  return g;
+}
+
+function refreshCells(){
+  if(!L||!L.demo)return;
+  if(L.custom)for(let f=1;f<=7;f++){const n=L.map[f];if(n)n.traverse(c=>{if(c.isMesh&&c.material.emissive)c.material.emissive.setHex(f===cur.f?0x1f5fd0:0x000000)})}
+  // ช่องที่ตรงตัวดันมีชั้นละช่อง (ทุกชั้นหมุนพร้อมกัน) · เน้นเฉพาะชั้นที่ตัวดันอยู่
+  for(let f=1;f<=7;f++){
+    const k=dayOfFloor(f),cells=L.demo.userData.floors[f].userData.cells;
+    cells.forEach((c,i)=>{
+      const on=k&&sched[k][i].on,isCur=f===cur.f&&i+1===cur.s;
+      c.material.color.setHex(on?0xffc928:0xc9d7ea);
+      c.material.emissive.setHex(isCur?0x1f6fd0:0x000000);
+    });
+  }
+}
+
+function goto(f,s){
+  f=Math.min(7,Math.max(1,f|0));s=Math.min(6,Math.max(1,s|0));
+  cur.f=f;cur.s=s;
+  let d=-(s-1)*STEP-tower.t;
+  d=((d+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
+  tower.t+=d;carr.t=f;
+  lvF.value=f;lvS.value=s;
+  $("lvFloor").textContent=f;$("lvSlot").textContent=s;$("hudNow").textContent="ตัวดันชั้น "+f+" · ช่อง "+s;
+  refreshCells();
+}
+
+const HAS3D=!!window.THREE;
+const AX=HAS3D?{x:new THREE.Vector3(1,0,0),y:new THREE.Vector3(0,1,0),z:new THREE.Vector3(0,0,1)}:{};
+const tmpQ=HAS3D?new THREE.Quaternion():null;
+function pushNow(){push.t0=performance.now()}
+function step(){
+  const da=tower.t-tower.a,df=carr.t-carr.f;
+  const spinning=Math.abs(da)>0.002,sliding=Math.abs(df)>0.004;
+  tower.a=spinning?tower.a+da*0.07:tower.t;
+  carr.f=sliding?carr.f+Math.sign(df)*Math.min(Math.abs(df),0.045):carr.t;
+  const pt=(performance.now()-push.t0)/900,pk=pt>=0&&pt<=1?Math.sin(pt*Math.PI):0;
+  if(L.demo&&L.demo.visible){
+    for(let f=1;f<=7;f++)L.demo.userData.floors[f].rotation.y=tower.a;
+    const c=L.demo.userData.car;c.position.y=c.userData.y0+(carr.f-1)*c.userData.H;c.userData.arm.position.z=c.userData.armZ-0.22*pk;
+  }
+  if(L.custom&&L.custom.visible){
+    tmpQ.setFromAxisAngle(AX[L.axis],tower.a);
+    for(let f=1;f<=7;f++){const n=L.map[f];if(n)n.quaternion.copy(n.userData.q0).multiply(tmpQ)}
+    const dz=(carr.f-CAR_HOME)*CAR_PITCH;
+    L.car.forEach(n=>{n.position.copy(n.userData.p0);n.position.z+=dz;if(n===L.arm)n.position.x-=0.014*pk});
+  }
+  const st=pk>0?"กำลังดันยา":spinning&&sliding?"หมุนถาด + เลื่อนตัวดัน":spinning?"กำลังหมุนถาด":sliding?"กำลังเลื่อนตัวดัน":"พร้อมจ่าย";
+  if($("lvState").textContent!==st)$("lvState").textContent=st;
+}
+
+$("lvGo").onclick=()=>command("goto",+lvF.value,+lvS.value);
+
+/* playback of schedule */
+let playT=null;
+$("lvPlay").onclick=()=>{
+  if(playT){clearInterval(playT);playT=null;$("lvPlay").textContent="▶ จำลองจ่ายตามตาราง";return}
+  const q=[];sortedDays().forEach(k=>sched[k].forEach((s,j)=>{if(s.on)q.push({f:floorOf(k),s:j+1,k,t:s.time})}));
+  if(!q.length){toast("ยังไม่มีช่องที่ตั้งเวลา ไปตั้งที่แท็บ START ก่อน");return}
+  let i=0;$("lvPlay").textContent="■ หยุดจำลอง";
+  const tick=()=>{if(i>=q.length){clearInterval(playT);playT=null;$("lvPlay").textContent="▶ จำลองจ่ายตามตาราง";toast("จำลองครบทุกช่องแล้ว");return}
+    const x=q[i++];goto(x.f,x.s);setTimeout(pushNow,1500);addLog("จ่ายยา "+fmt(x.k)+" "+x.t+" → ชั้น "+x.f+" ช่อง "+x.s+" (จำลอง)")};
+  tick();playT=setInterval(tick,3000);
+};
+
+/* load Onshape model */
+$("modelFile").onchange=e=>{
+  const file=e.target.files[0];if(!file)return;initLive();
+  if(!L.scene){toast("ไลบรารี 3D ยังไม่พร้อม");return}
+  const ext=file.name.split(".").pop().toLowerCase(),rd=new FileReader();
+  rd.onload=()=>{
+    const done=obj=>{useModel(obj,file.name)};
+    try{
+      if(ext==="stl"){
+        const geo=new THREE.STLLoader().parse(rd.result);geo.computeVertexNormals();
+        done(new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0x3b74f0,roughness:.5})));
+      }else{
+        new THREE.GLTFLoader().parse(rd.result,"",g=>done(g.scene),err=>{toast("เปิดไฟล์ไม่ได้ ถ้าเป็น .gltf ให้ส่งออกเป็น .glb แทน");console.error(err)});
+      }
+    }catch(err){toast("เปิดไฟล์ไม่ได้: "+err.message)}
+  };
+  rd.readAsArrayBuffer(file);e.target.value="";
+};
+
+/* the machine model exported from Onshape (compressed copy published next to this page) */
+async function loadDefaultModel(){
+  $("modelInfo").textContent="กำลังโหลดโมเดลเครื่องจริง…";
+  try{
+    if(!window.DecompressionStream)throw new Error("เบราว์เซอร์นี้เก่าเกินไป");
+    const r=await fetch("machine.gz.b64.txt");if(!r.ok)throw new Error(r.status);
+    const bin=atob((await r.text()).trim()),gz=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)gz[i]=bin.charCodeAt(i);
+    const buf=await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+    new THREE.GLTFLoader().parse(buf,"",g=>useModel(g.scene,"Assembly 2 (Onshape)",true),
+      err=>{console.error(err);$("modelInfo").textContent="โหลดโมเดลเครื่องจริงไม่สำเร็จ · แสดงโมเดลจำลอง"});
+  }catch(e){console.error(e);$("modelInfo").textContent="โหลดโมเดลเครื่องจริงไม่สำเร็จ · แสดงโมเดลจำลอง"}
+}
+
+function useModel(obj,name,quiet){
+  if(L.custom)L.scene.remove(L.custom);
+  obj.rotation.x=-Math.PI/2; // Onshape exports Z-up; three.js is Y-up
+  const wrap=new THREE.Group();wrap.add(obj);
+  L.custom=wrap;L.scene.add(wrap);L.demo.visible=false;
+  fitModel();
+  L.nodes=[];L.map={};
+  obj.traverse(o=>{if(o!==obj&&o.name&&L.nodes.length<300){let has=false;o.traverse(c=>{if(c.isMesh)has=true});if(has){o.userData.q0=o.quaternion.clone();L.nodes.push(o)}}});
+  let meshes=0;obj.traverse(o=>{if(o.isMesh)meshes++});
+  $("modelInfo").textContent=name+" · "+meshes+" ชิ้นส่วน";
+  $("uprightBtn").hidden=$("demoModelBtn").hidden=false;
+  buildMap();
+  // auto-match trays named tray_1 … tray_7
+  let found=0;
+  L.nodes.forEach((n,i)=>{const m=/tray[_\s-]?(\d)/i.exec(n.name);if(m&&+m[1]>=1&&+m[1]<=7&&!L.map[+m[1]]){
+    const f=+m[1];L.map[f]=n;$("map"+f).value=i;found++;
+    n.traverse(c=>{if(c.isMesh){c.material=c.material.clone();c.userData.tray=f}})}});
+  if(found){L.axis="z";$("axisSel").value="z"}
+  // ชุดตัวดันยา: ชิ้นส่วนที่ชื่อขึ้นต้นด้วย pusher
+  L.car=[];L.arm=null;
+  obj.traverse(o=>{if(/^pusher/i.test(o.name)&&!(o.parent&&/^pusher/i.test(o.parent.name))){o.userData.p0=o.position.clone();L.car.push(o);if(/arm/i.test(o.name))L.arm=o}});
+  if(L.car.length)$("modelInfo").textContent+=" · ถาด "+found+" ชั้น · ตัวดันยา "+L.car.length+" ชิ้น";
+  tower.a=tower.t=0;carr.f=carr.t=CAR_HOME;
+  goto(cur.f,cur.s);
+  if(!quiet)toast("โหลดโมเดลแล้ว"+(found?" · จับคู่ถาด "+found+" ชั้นอัตโนมัติ":""));
+}
+function fitModel(){
+  const w=L.custom;w.scale.setScalar(1);w.position.set(0,0,0);w.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(w),size=box.getSize(new THREE.Vector3()),c=box.getCenter(new THREE.Vector3());
+  const k=3.2/Math.max(size.x,size.y,size.z,1e-6);w.scale.setScalar(k);
+  w.position.set(-c.x*k,-box.min.y*k,-c.z*k);
+  L.ctl.target.set(0,size.y*k/2,0);
+}
+$("uprightBtn").onclick=()=>{const o=L.custom.children[0];o.rotation.x-=Math.PI/2;fitModel()};
+$("demoModelBtn").onclick=()=>{if(L.custom)L.scene.remove(L.custom);L.custom=null;L.map={};L.demo.visible=true;L.ctl.target.set(0,1.4,0);
+  $("uprightBtn").hidden=$("demoModelBtn").hidden=$("mapBox").hidden=true;$("realModelBtn").hidden=false;$("modelInfo").textContent="โมเดลจำลอง 7 ชั้น × 6 ช่อง"};
+$("realModelBtn").onclick=()=>{$("realModelBtn").hidden=true;loadDefaultModel()};
+$("axisSel").onchange=e=>{L.axis=e.target.value;L.nodes.forEach(n=>n.quaternion.copy(n.userData.q0))};
+
+function buildMap(){
+  const g=$("mapGrid");g.innerHTML="";$("mapBox").hidden=!L.nodes.length;
+  for(let f=1;f<=7;f++){
+    const d=document.createElement("div");d.className="field";
+    d.innerHTML='<label for="map'+f+'">ชั้น '+f+'</label>';
+    const s=document.createElement("select");s.id="map"+f;s.add(new Option("— ไม่หมุน —",""));
+    L.nodes.forEach((n,i)=>s.add(new Option(n.name,i)));
+    s.onchange=()=>{const old=L.map[f];if(old)old.quaternion.copy(old.userData.q0);L.map[f]=s.value===""?null:L.nodes[+s.value]};
+    d.appendChild(s);g.appendChild(d);
+  }
+}
+
+/* real ESP32 link (works when this page is served from a computer on the same Wi‑Fi) */
+let ws=null;
+function setPill(ok,txt){[$("livePill"),$("connPill")].forEach(p=>{p.className="pill "+(ok?"ok":"sim");p.textContent=txt})}
+let espClock=0;
+function sendCmd(o){if(ws&&ws.readyState===1){ws.send(JSON.stringify(o));return true}return false}
+const ST={moving:"กำลังหมุน",ready:"พร้อม",dispensing:"กำลังดันยา"};
+function connectESP(addr){
+  addr=addr.trim();save("p7_esp",addr);
+  if(location.protocol==="https:"&&addr.startsWith("ws://")){
+    addLog("หน้านี้เปิดผ่านอินเทอร์เน็ต (https) จึงเชื่อมกับเครื่องในบ้านไม่ได้");
+    toast("ให้เปิดเว็บจากคอมที่อยู่ Wi‑Fi เดียวกับเครื่องแทน");return}
+  try{if(ws)ws.close();ws=new WebSocket(addr)}catch(e){addLog("เชื่อมต่อ "+addr+" ไม่ได้: "+e.message);toast("ที่อยู่ไม่ถูกต้อง ตัวอย่าง ws://192.168.1.50:81");return}
+  addLog("กำลังเชื่อมต่อ "+addr+" …");
+  const me=ws;
+  ws.onopen=()=>{setPill(true,"เชื่อมต่อแล้ว");addLog("เชื่อมต่อ ESP32 สำเร็จ");toast("เชื่อมต่อเครื่องจ่ายยาแล้ว");
+    const n=new Date();
+    sendCmd({cmd:"time",y:n.getFullYear(),mo:n.getMonth()+1,d:n.getDate(),h:n.getHours(),mi:n.getMinutes(),s:n.getSeconds()});
+    sendCmd({cmd:"schedule",data:payload()});
+  };
+  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}
+    if(m.type==="log"){addLog("ESP32: "+m.msg);return}
+    if(m.type==="taken"&&m.floor&&m.slot){markTaken(m.floor,m.slot,m.at);addLog("เซนเซอร์: รับยาชั้น "+m.floor+" ช่อง "+m.slot+" แล้ว");return}
+    if(m.type==="photo"&&m.floor&&m.slot&&typeof m.img==="string"&&m.img.startsWith("data:image/")){setPhoto(m.floor,m.slot,m.img,m.phase);addLog("กล้อง: ได้ภาพ"+({dispensed:"ตอนจ่ายยา",taken:"หลังรับยา"}[m.phase]||"")+" ชั้น "+m.floor+" ช่อง "+m.slot);return}
+    if(m.type==="status"){espClock=Date.now();if(m.rtc)$("rtc").textContent=m.rtc;
+      if(m.floor&&m.slot&&(m.floor!==cur.f||m.slot!==cur.s))goto(m.floor,m.slot);return}
+    if(m.floor&&m.slot){goto(m.floor,m.slot);if(m.state==="dispensing")pushNow();addLog("ESP32: ชั้น "+m.floor+" ช่อง "+m.slot+" · "+(ST[m.state]||m.state||""))}
+  };
+  ws.onerror=()=>{addLog("เชื่อมต่อ "+addr+" ไม่สำเร็จ ตรวจว่า ESP32 เปิดอยู่และใช้ Wi‑Fi เดียวกัน");toast("ยังไม่พบ ESP32")};
+  ws.onclose=()=>{if(ws===me){setPill(false,"โหมดจำลอง");espClock=0}};
+}
+$("copyJson").onclick=()=>{const t=$("json").textContent;
+  navigator.clipboard.writeText(t).then(()=>toast("คัดลอก JSON แล้ว"),()=>{const r=document.createRange();r.selectNodeContents($("json"));const s=getSelection();s.removeAllRanges();s.addRange(r);toast("เลือกข้อความแล้ว กด Ctrl+C เพื่อคัดลอก")})};
+setInterval(()=>{if(Date.now()-espClock>5000)$("rtc").textContent=new Date().toLocaleTimeString("th-TH",{hour12:false})},1000);
+
+function renderAll(){renderCal();renderChips();renderEditor();renderRack();renderJson();renderStats();refreshCells()}
+addLog("ระบบพร้อม · โหมดจำลอง");
+
+/* ---------- resume session ---------- */
+const sess=load("p7_session",null);
+if(sess && (sess==="ตัวอย่าง" || load("p7_users",{})[sess.toLowerCase()])) enter(sess);
+})();
+</script>
+
+</body></html>

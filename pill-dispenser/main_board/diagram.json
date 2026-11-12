@@ -126,10 +126,10 @@
     {
       "type": "wokwi-text",
       "id": "t_ir",
-      "top": 455,
-      "left": -300,
+      "top": 355,
+      "left": -330,
       "attrs": {
-        "text": "Pill sensor: LEFT = pill, RIGHT = empty"
+        "text": "Pill sensor: click switch (LEFT = empty, RIGHT = pill)"
       }
     },
     {
@@ -178,12 +178,12 @@
       }
     },
     {
-      "type": "wokwi-potentiometer",
+      "type": "wokwi-slide-switch",
       "id": "ir1",
-      "top": 370,
-      "left": -260,
+      "top": 389.6,
+      "left": -246.5,
       "attrs": {
-        "value": "1023"
+        "value": ""
       }
     }
   ],
@@ -484,19 +484,19 @@
       []
     ],
     [
-      "ir1:SIG",
+      "ir1:2",
       "esp:VP",
       "violet",
       []
     ],
     [
-      "ir1:VCC",
+      "ir1:1",
       "esp:3V3",
       "red",
       []
     ],
     [
-      "ir1:GND",
+      "ir1:3",
       "esp:GND.1",
       "black",
       []

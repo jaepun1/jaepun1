@@ -8,9 +8,14 @@
       {"type":"photo","floor":3,"slot":4,"phase":"dispensed","at":12345,"img":"data:image/jpeg;base64,..."}
   - ส่งสถานะเครือข่ายให้บอร์ดหลักทุก 3 วินาที (แสดง IP บนจอ OLED)
 
-  บอร์ด: Arduino IDE > Tools
-    Board: "ESP32S3 Dev Module"   PSRAM: "OPI PSRAM"   Flash Size: ตามบอร์ด
-    Partition Scheme: "Huge APP (3MB No OTA/1MB SPIFFS)"
+  บอร์ดที่ใช้: ESP32-S3 N16R8 CAM + OV2640 (แฟลช 16MB, PSRAM 8MB) ผังขาเหมือน Freenove ESP32-S3 CAM
+  Arduino IDE > Tools
+    Board: "ESP32S3 Dev Module"
+    Flash Size: "16MB (128Mb)"
+    PSRAM: "OPI PSRAM"
+    Partition Scheme: "16M Flash (3MB APP/9.9MB FATFS)"
+    USB CDC On Boot: "Disabled"  แล้วเสียบสาย USB ช่องที่เขียนว่า COM (หรือ UART) เพื่ออัปโหลดและดู Serial Monitor
+      (ถ้าเสียบช่อง USB/OTG ให้ตั้ง USB CDC On Boot เป็น "Enabled" แทน)
   ไลบรารี: WebSockets (Markus Sattler), ArduinoJson (Benoit Blanchon) v7
 */
 
@@ -39,8 +44,9 @@ const char *AP_PASS = "12345678";
 HardwareSerial Board(1);
 
 // ==========================================
-// ขากล้อง: Freenove ESP32-S3-WROOM CAM / ESP32-S3-EYE (OV2640)
-// ถ้าใช้บอร์ดรุ่นอื่น ให้คัดลอกค่าจาก camera_pins.h ในตัวอย่าง CameraWebServer
+// ขากล้อง: ESP32-S3 N16R8 CAM (OV2640) / Freenove ESP32-S3-WROOM CAM / ESP32-S3-EYE
+// ตรงกับ CAMERA_MODEL_ESP32S3_EYE ใน camera_pins.h ของตัวอย่าง CameraWebServer
+// ห้ามใช้ GPIO 35-37 (PSRAM แบบ OPI) และ 43-44 (USB-UART) ต่ออย่างอื่น
 // ==========================================
 #define PWDN_GPIO_NUM  -1
 #define RESET_GPIO_NUM -1

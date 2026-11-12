@@ -53,7 +53,7 @@
 | GPIO 14 (RX) | GPIO 17 (TX2) |
 | GND | GND |
 
-ขากล้องในโค้ดตั้งไว้สำหรับ **Freenove ESP32-S3-WROOM CAM / ESP32-S3-EYE** ถ้าใช้บอร์ดรุ่นอื่น ให้คัดลอกขาจาก `camera_pins.h` ในตัวอย่าง CameraWebServer และตรวจว่า GPIO 14 กับ 21 ไม่ชนกับขากล้อง
+บอร์ดกล้องที่ใช้คือ **ESP32-S3 N16R8 CAM + OV2640** (ผังขาแบบเดียวกับ Freenove ESP32-S3 CAM) ขากล้องในโค้ดตั้งไว้ตรงกับบอร์ดนี้แล้ว GPIO 14 และ 21 ว่าง ไม่ชนกับกล้อง ห้ามใช้ GPIO 35–37 (PSRAM) และ 43–44 (USB-UART) ต่ออุปกรณ์อื่น
 
 > ⚠️ **เซนเซอร์ IR**: ให้จ่ายไฟ **3.3V** หรือถ้าจ่าย 5V ต้องแบ่งแรงดันขา OUT ก่อนเข้า GPIO27 เพราะขา ESP32 รับได้ไม่เกิน 3.3V
 > ⚠️ **ไฟเลี้ยง**: เซอร์โว มอเตอร์ และกล้องกินกระแสสูง ควรใช้แหล่งจ่าย 5V แยก (เช่น 18650 + บอร์ดเพิ่มแรงดัน) และต่อ GND ร่วมกับ ESP32
@@ -67,7 +67,9 @@
 - ค่าที่ต้องปรับให้ตรงกับเครื่องจริงอยู่ส่วน "ค่าที่ปรับได้" ด้านบนของไฟล์ ได้แก่ `TRAY_ANGLE` (มุมของแต่ละช่อง), `PUSH_OUT`, `LIFT_MS_PER_FLOOR` (เวลาที่ใช้เลื่อน 1 ชั้น) และ `IR_ACTIVE_LEVEL`
 
 ### ESP32-S3 CAM
-- Board: **ESP32S3 Dev Module**, PSRAM: **OPI PSRAM**, Partition: **Huge APP**
+- Board: **ESP32S3 Dev Module**, Flash Size: **16MB**, PSRAM: **OPI PSRAM**, Partition: **16M Flash (3MB APP/9.9MB FATFS)**
+- เสียบสาย USB ช่องที่เขียนว่า **COM** (หรือ UART) และตั้ง USB CDC On Boot: **Disabled** ถ้าเสียบช่อง **USB** (OTG) ให้ตั้งเป็น **Enabled** แทน ไม่อย่างนั้น Serial Monitor จะไม่ขึ้นข้อความ
+- ถ้าอัปโหลดไม่ขึ้น ให้กดปุ่ม BOOT ค้างไว้ แล้วกด RST 1 ครั้ง จากนั้นค่อยปล่อย BOOT
 - ไลบรารี: **WebSockets** (Markus Sattler), **ArduinoJson (v7)**
 - แก้ `WIFI_SSID` / `WIFI_PASS` ถ้าต่อ Wi-Fi ไม่ได้ กล้องจะเปิดฮอตสปอต `PillDispenser` (รหัส `12345678`) ให้แทน ที่อยู่คือ `ws://192.168.4.1:81`
 - เปิด Serial Monitor ดู IP หรือดูจากจอ OLED ของบอร์ดหลัก

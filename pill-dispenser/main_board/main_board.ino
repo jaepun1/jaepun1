@@ -12,6 +12,7 @@
     {"cmd":"goto","floor":3,"slot":4}        หมุนถาด + เลื่อนตัวดัน
     {"cmd":"dispense","floor":3,"slot":4}    หมุน + ดันยา
     {"cmd":"stop"}                           หยุดเพลง
+    {"cmd":"ir"}                             ดูค่าเซนเซอร์ตรวจยา (ใช้ตั้งค่า)
 
   ข้อความที่ส่งกลับไปเว็บ
     {"type":"status","rtc":"08:00:05","floor":3,"slot":4}     ทุก 2 วินาที
@@ -56,7 +57,7 @@ RTC_DS1307 rtc;            // เครื่องจริงใช้ DS3231 
 #define LIFT_IN1     32   // L298N IN1  เลื่อนตัวดันขึ้น
 #define LIFT_IN2     33   // L298N IN2  เลื่อนตัวดันลง
 #define LIFT_EN      23   // L298N ENA  ความเร็ว (PWM)
-#define IR_PIN       27   // เซนเซอร์อินฟราเรดที่ถาดรับยา
+#define IR_PIN       36   // เซนเซอร์ตรวจยาในถาด EC-BOT PU (analog) ขา VP / ADC1
 #define LED_OK       13   // LED เขียว: ต่อเว็บแอปแล้ว
 #define LED_PILL     14   // LED แดง: มียาค้างในถาด
 #define BTN_TEST     4    // ปุ่มเขียว: ทดสอบจ่ายยามื้อถัดไปทันที
@@ -65,7 +66,12 @@ RTC_DS1307 rtc;            // เครื่องจริงใช้ DS3231 
 // ==========================================
 // ค่าที่ปรับได้
 // ==========================================
-#define IR_ACTIVE_LEVEL   LOW        // โมดูล IR ทั่วไป (FC-51) ให้ LOW เมื่อเจอวัตถุ
+// เซนเซอร์ EC-BOT PU (LED ฟ้า + phototransistor) ให้ค่า analog: สะท้อนแสงมาก (สีขาว) = ค่าต่ำ, ไม่สะท้อน (สีดำ/ว่าง) = ค่าสูง
+// ESP32 อ่านได้ 0-4095 (บอร์ด Arduino UNO อ่าน 0-1023 ค่าบนกล่อง ขาว <100, ดำ >800 จึงเท่ากับประมาณ ขาว <400, ดำ >3200 บน ESP32)
+// ดูค่าจริงได้จากช่อง "ir" ในข้อความ status หรือส่งคำสั่ง {"cmd":"ir"} แล้วตั้ง IR_THRESHOLD ไว้กึ่งกลางระหว่าง "ถาดว่าง" กับ "มียา"
+const bool IR_PILL_WHEN_LOW = true;   // ยาสีขาวบนพื้นถาดสีดำ = ค่าต่ำเมื่อมียา (ถ้ายาสีเข้มบนพื้นขาว ให้เป็น false)
+const int  IR_THRESHOLD = 2000;       // เส้นแบ่ง มียา / ไม่มียา (0-4095)
+const int  IR_HYST = 200;             // กันค่ากระพือรอบเส้นแบ่ง
 const uint8_t  TRAY_ANGLE[6] = {0, 30, 60, 90, 120, 150};  // มุมเซอร์โวของช่อง 1-6
 const uint8_t  PUSH_REST = 0, PUSH_OUT = 90;               // มุมแขนดันยา
 const uint16_t LIFT_MS_PER_FLOOR = 800;   // เวลาที่มอเตอร์ใช้เลื่อน 1 ชั้น (ต้องจับเวลากับเครื่องจริง)
@@ -191,6 +197,7 @@ bool nextDose(const DateTime &now, int &nf, int &ns);
 void moveLift(int f);
 void moveTo(int f, int s);
 void pushPill();
+int  irRaw();
 bool pillPresent();
 void startDose(int f, int s, bool scheduled);
 void ring();
@@ -220,7 +227,8 @@ void setup() {
   pinMode(SW_PIN, INPUT_PULLUP);
   pinMode(BUZ_PIN, OUTPUT);
   digitalWrite(BUZ_PIN, LOW);
-  pinMode(IR_PIN, INPUT_PULLUP);
+  pinMode(IR_PIN, INPUT);
+  analogSetPinAttenuation(IR_PIN, ADC_11db);   // อ่านได้เต็มช่วง 0-3.3V
   pinMode(BTN_TEST, INPUT_PULLUP);
   pinMode(BTN_STOP, INPUT_PULLUP);
   pinMode(LED_OK, OUTPUT);
@@ -371,6 +379,7 @@ void sendStatus(const DateTime &now) {
   d["floor"] = curFloor;
   d["slot"] = curSlot;
   d["pill"] = pillPresent();
+  d["ir"] = irRaw();         // ค่าดิบของเซนเซอร์ ใช้ตั้ง IR_THRESHOLD
   sendJson(d);
 }
 
@@ -435,6 +444,8 @@ void handleLine(String &line) {
   } else if (!strcmp(cmd, "capture")) {
     // ปกติกล้องจัดการเอง ถ้ามาถึงบอร์ดนี้ (เช่นทดสอบใน Wokwi) ให้ขอภาพผ่าน UART
     if (validPos(f, s)) requestPhoto(f, s, "manual");
+  } else if (!strcmp(cmd, "ir")) {
+    sendLog("ค่าเซนเซอร์ตรวจยา = " + String(irRaw()) + (pillPresent() ? " (มียา)" : " (ไม่มียา)"));
   } else if (!strcmp(cmd, "stop")) {
     stopRequested = true;
   }
@@ -572,7 +583,21 @@ void pushPill() {
   sendState("ready");
 }
 
-bool pillPresent() { return digitalRead(IR_PIN) == IR_ACTIVE_LEVEL; }
+// อ่านค่าเฉลี่ย 8 ครั้ง ลดสัญญาณรบกวน
+int irRaw() {
+  long sum = 0;
+  for (int i = 0; i < 8; i++) sum += analogRead(IR_PIN);
+  return sum / 8;
+}
+
+bool pillPresent() {
+  static bool state = false;
+  int v = irRaw();
+  bool low = v < IR_THRESHOLD - IR_HYST, high = v > IR_THRESHOLD + IR_HYST;
+  if (IR_PILL_WHEN_LOW ? low : high) state = true;
+  else if (IR_PILL_WHEN_LOW ? high : low) state = false;
+  return state;      // อยู่ในช่วงกลาง: คงสถานะเดิม
+}
 
 // ==========================================
 // ติดตามมื้อยา: จ่าย -> ถ่ายภาพ -> เพลง -> เตือนซ้ำ -> หยิบแล้ว -> ถ่ายภาพ

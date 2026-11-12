@@ -124,21 +124,12 @@
       "attrs": {}
     },
     {
-      "type": "wokwi-slide-switch",
-      "id": "ir1",
-      "top": 389.6,
-      "left": -246.5,
-      "attrs": {
-        "value": ""
-      }
-    },
-    {
       "type": "wokwi-text",
       "id": "t_ir",
       "top": 360,
       "left": -300,
       "attrs": {
-        "text": "IR sensor (slide right = pill in tray)"
+        "text": "Pill sensor (analog): turn LEFT = pill in tray"
       }
     },
     {
@@ -185,6 +176,13 @@
       "attrs": {
         "text": "Stop song (5)"
       }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "ir1",
+      "top": 370,
+      "left": -260,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -484,13 +482,19 @@
       []
     ],
     [
-      "ir1:2",
-      "esp:27",
+      "ir1:SIG",
+      "esp:VP",
       "violet",
       []
     ],
     [
-      "ir1:3",
+      "ir1:VCC",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "ir1:GND",
       "esp:GND.1",
       "black",
       []

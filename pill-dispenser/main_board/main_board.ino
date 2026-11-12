@@ -103,12 +103,12 @@ bool joyMoved = false;
 // ==========================================
 // ตารางเวลา: 7 ชั้น (1 ชั้น = 1 วัน ตามวันที่จากเว็บ) × 6 ช่อง
 // ==========================================
-enum DoneState : uint8_t { PENDING = 0, DISPENSED = 1, TAKEN = 2, MISSED = 3 };
+enum DoneState : uint8_t { DOSE_PENDING = 0, DOSE_DISPENSED = 1, DOSE_TAKEN = 2, DOSE_MISSED = 3 };
 struct AlarmTimer {
   uint8_t hour = 0;
   uint8_t minute = 0;
   bool    active = false;
-  uint8_t done = PENDING;
+  uint8_t done = DOSE_PENDING;
 };
 struct FloorDay {
   char date[11] = "";        // "YYYY-MM-DD" ว่าง = ชั้นนี้ไม่ได้ใช้
@@ -136,16 +136,16 @@ int liftFloor = 1;
 
 // โหมดของการจ่ายยา
 enum DoseMode : uint8_t {
-  MODE_SCHEDULED,   // มื้อจริงตามตาราง: เพลง + เตือนซ้ำ + แจ้งเว็บว่ารับยาแล้ว
-  MODE_MANUAL,      // ปุ่ม "หมุนและดันยา" ในเว็บ: ไม่มีเพลง ไม่บันทึกลงตาราง
-  MODE_TEST         // คำสั่ง test: ทดสอบครบทุกขั้น รายงานผลทีละขั้นให้เว็บ ไม่บันทึกลงตาราง
+  DOSE_SCHEDULED,   // มื้อจริงตามตาราง: เพลง + เตือนซ้ำ + แจ้งเว็บว่ารับยาแล้ว
+  DOSE_MANUAL,      // ปุ่ม "หมุนและดันยา" ในเว็บ: ไม่มีเพลง ไม่บันทึกลงตาราง
+  DOSE_TEST         // คำสั่ง test: ทดสอบครบทุกขั้น รายงานผลทีละขั้นให้เว็บ ไม่บันทึกลงตาราง
 };
 
 struct Dose {
   bool     active = false;
   int      f = 0, s = 0;          // 1-based
-  uint8_t  mode = MODE_SCHEDULED;
-  bool     scheduled = false;     // mode == MODE_SCHEDULED
+  uint8_t  mode = DOSE_SCHEDULED;
+  bool     scheduled = false;     // mode == DOSE_SCHEDULED
   bool     pillSeen = false;
   uint32_t startMs = 0, lastRingMs = 0, clearSinceMs = 0;
   uint8_t  rings = 0;
@@ -455,14 +455,14 @@ void handleLine(String &line) {
   } else if (!strcmp(cmd, "goto")) {
     if (validPos(f, s)) moveTo(f, s);
   } else if (!strcmp(cmd, "dispense")) {
-    if (validPos(f, s)) startDose(f, s, MODE_MANUAL);
+    if (validPos(f, s)) startDose(f, s, DOSE_MANUAL);
   } else if (!strcmp(cmd, "test")) {
-    if (validPos(f, s)) startDose(f, s, MODE_TEST);
+    if (validPos(f, s)) startDose(f, s, DOSE_TEST);
     else sendLog("คำสั่ง test ต้องระบุชั้น 1-7 และช่อง 1-6");
   } else if (!strcmp(cmd, "cancel")) {
     if (dose.active && !dose.scheduled) {
       stopRequested = true;
-      if (dose.mode == MODE_TEST) { testStep("taken", false, "ยกเลิกการทดสอบ"); testStep("done", false); }
+      if (dose.mode == DOSE_TEST) { testStep("taken", false, "ยกเลิกการทดสอบ"); testStep("done", false); }
       sendLog("ยกเลิกแล้ว");
       endDose();
     }
@@ -540,14 +540,14 @@ void checkAlarms(DateTime now) {
     if (today != floors[f].date) continue;
     for (int s = 0; s < 6; s++) {
       AlarmTimer &a = floors[f].slot[s];
-      if (!a.active || a.done != PENDING) continue;
+      if (!a.active || a.done != DOSE_PENDING) continue;
       int due = a.hour * 60 + a.minute;
       if (nowMin >= due && nowMin <= due + GRACE_MIN) {
-        startDose(f + 1, s + 1, MODE_SCHEDULED);
+        startDose(f + 1, s + 1, DOSE_SCHEDULED);
         return;            // ทีละมื้อ
       }
       if (nowMin > due + GRACE_MIN) {   // เลยเวลาไปนาน (เครื่องปิดอยู่) ไม่จ่ายย้อนหลัง
-        a.done = MISSED;
+        a.done = DOSE_MISSED;
         saveSchedule();
         sendLog("ข้ามมื้อ ชั้น " + String(f + 1) + " ช่อง " + String(s + 1) + " เพราะเลยเวลาแล้ว");
       }
@@ -564,7 +564,7 @@ bool nextDose(const DateTime &now, int &nf, int &ns) {
     if (!floors[f].date[0] || today > floors[f].date) continue;
     for (int s = 0; s < 6; s++) {
       AlarmTimer &a = floors[f].slot[s];
-      if (!a.active || a.done != PENDING) continue;
+      if (!a.active || a.done != DOSE_PENDING) continue;
       if (today == floors[f].date && a.hour * 60 + a.minute < nowMin) continue;
       String key = String(floors[f].date) + " " + two(a.hour) + ":" + two(a.minute);
       if (best == "" || key < best) { best = key; nf = f + 1; ns = s + 1; }
@@ -629,7 +629,7 @@ bool pillPresent() {
 // ==========================================
 // รายงานผลการทดสอบทีละขั้นให้เว็บ (เฉพาะโหมดทดสอบ)
 void testStep(const char *step, bool ok, const String &msg) {
-  if (dose.mode != MODE_TEST) return;
+  if (dose.mode != DOSE_TEST) return;
   JsonDocument d;
   d["type"] = "test";
   d["floor"] = dose.f;
@@ -652,22 +652,22 @@ void endDose() {
 
 void startDose(int f, int s, uint8_t mode) {
   if (dose.active) {   // มื้อก่อนยังไม่จบ: ปิดมื้อเก่าก่อน
-    if (dose.scheduled) markDone(dose.f, dose.s, MISSED);
-    if (dose.mode == MODE_TEST) { testStep("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); testStep("done", false); }
+    if (dose.scheduled) markDone(dose.f, dose.s, DOSE_MISSED);
+    if (dose.mode == DOSE_TEST) { testStep("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); testStep("done", false); }
     sendLog("ปิดงานชั้น " + String(dose.f) + " ช่อง " + String(dose.s) + " เพราะมีงานใหม่");
   }
   dose = Dose();
   dose.f = f;
   dose.s = s;
   dose.mode = mode;
-  dose.scheduled = (mode == MODE_SCHEDULED);
+  dose.scheduled = (mode == DOSE_SCHEDULED);
   testStep("start", true);
 
   moveTo(f, s);
   testStep("move", true);
   pushPill();
   testStep("push", true);
-  if (dose.scheduled) markDone(f, s, DISPENSED);
+  if (dose.scheduled) markDone(f, s, DOSE_DISPENSED);
 
   dose.active = true;
   dose.startMs = millis();
@@ -686,7 +686,7 @@ void startDose(int f, int s, uint8_t mode) {
     testStep("pill", false, "ไม่พบยาภายใน " + String(PILL_DETECT_MS / 1000) + " วินาที (ค่าเซนเซอร์ " + String(irRaw()) + ")");
   }
 
-  if (dose.mode == MODE_TEST) {
+  if (dose.mode == DOSE_TEST) {
     testStep("ring", true);
     ring();                       // เพลงเล่นเมื่อ loop() วนกลับไป
     if (!dose.pillSeen) {         // ไม่มียาในถาด: ทดสอบขั้นหยิบยาต่อไม่ได้
@@ -730,7 +730,7 @@ void updateDose() {
         d["slot"] = dose.s;
         d["at"] = isoDateTime(now);
         sendJson(d);
-        markDone(dose.f, dose.s, TAKEN);
+        markDone(dose.f, dose.s, DOSE_TAKEN);
       } else {
         sendLog("หยิบยาออกจากถาดแล้ว (ทดสอบ) ชั้น " + String(dose.f) + " ช่อง " + String(dose.s));
       }
@@ -751,7 +751,7 @@ void updateDose() {
     ring();
   }
 
-  if (dose.mode == MODE_TEST && millis() - dose.startMs >= TEST_TIMEOUT_MS) {
+  if (dose.mode == DOSE_TEST && millis() - dose.startMs >= TEST_TIMEOUT_MS) {
     testStep("taken", false, "ไม่ได้หยิบยาภายใน 2 นาที");
     testStep("done", false);
     endDose();
@@ -759,7 +759,7 @@ void updateDose() {
   }
 
   if (millis() - dose.startMs >= MISSED_MS) {
-    if (dose.scheduled) markDone(dose.f, dose.s, MISSED);
+    if (dose.scheduled) markDone(dose.f, dose.s, DOSE_MISSED);
     sendLog("ไม่ได้รับยา ชั้น " + String(dose.f) + " ช่อง " + String(dose.s));
     endDose();
   }
@@ -816,7 +816,7 @@ void handleButtons() {
     int f, s;
     if (nextDose(rtc.now(), f, s)) {
       sendLog("กดปุ่มทดสอบ: จ่ายมื้อถัดไปทันที");
-      startDose(f, s, MODE_SCHEDULED);
+      startDose(f, s, DOSE_SCHEDULED);
     } else {
       tone(BUZ_PIN, 400, 200);   // ไม่มีมื้อที่ตั้งไว้
     }
@@ -871,9 +871,9 @@ void processDir(int dir) {
       AlarmTimer &a = floors[setFloor].slot[setSlot];
       if (editField == 0) setFloor = (setFloor + step + 7) % 7;
       if (editField == 1) setSlot = (setSlot + step + 6) % 6;
-      if (editField == 2) { a.hour = (a.hour + step + 24) % 24; a.done = PENDING; scheduleEdited = true; }
-      if (editField == 3) { a.minute = (a.minute + step + 60) % 60; a.done = PENDING; scheduleEdited = true; }
-      if (editField == 4) { a.active = !a.active; a.done = PENDING; scheduleEdited = true; }
+      if (editField == 2) { a.hour = (a.hour + step + 24) % 24; a.done = DOSE_PENDING; scheduleEdited = true; }
+      if (editField == 3) { a.minute = (a.minute + step + 60) % 60; a.done = DOSE_PENDING; scheduleEdited = true; }
+      if (editField == 4) { a.active = !a.active; a.done = DOSE_PENDING; scheduleEdited = true; }
     }
   }
 }
@@ -988,7 +988,7 @@ void drawSetTime() {
 void drawAlarmRinging() {
   display.setTextSize(2);
   display.setCursor(10, 10);
-  display.println(dose.mode == MODE_TEST ? "TEST" : "TAKE PILL");
+  display.println(dose.mode == DOSE_TEST ? "TEST" : "TAKE PILL");
   display.setTextSize(1);
   display.setCursor(10, 35);
   display.print("Floor "); display.print(dose.f);

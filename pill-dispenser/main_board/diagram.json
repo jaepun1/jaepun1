@@ -126,10 +126,10 @@
     {
       "type": "wokwi-text",
       "id": "t_ir",
-      "top": 360,
+      "top": 455,
       "left": -300,
       "attrs": {
-        "text": "Pill sensor (analog): turn LEFT = pill in tray"
+        "text": "Pill sensor: LEFT = pill, RIGHT = empty"
       }
     },
     {
@@ -182,7 +182,9 @@
       "id": "ir1",
       "top": 370,
       "left": -260,
-      "attrs": {}
+      "attrs": {
+        "value": "1023"
+      }
     }
   ],
   "connections": [

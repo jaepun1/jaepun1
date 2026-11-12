@@ -4,8 +4,9 @@
   - ต่อ Wi-Fi แล้วเปิด WebSocket ที่พอร์ต 81  (เว็บแอปเชื่อมที่ ws://<IP>:81 หรือ ws://pill.local:81)
   - คำสั่งจากเว็บ -> ส่งต่อให้บอร์ดหลักทาง UART (JSON ทีละบรรทัด)
   - ข้อความจากบอร์ดหลัก -> ส่งต่อให้เว็บทุกหน้าที่เชื่อมอยู่
-  - {"type":"snap",...} จากบอร์ดหลัก และ {"cmd":"capture",...} จากเว็บ -> ถ่ายภาพแล้วส่งเป็น
+  - {"type":"snap",...} จากบอร์ดหลัก และ {"cmd":"capture","floor":3,"slot":4,"phase":"test"} จากเว็บ -> ถ่ายภาพแล้วส่งเป็น
       {"type":"photo","floor":3,"slot":4,"phase":"dispensed","at":12345,"img":"data:image/jpeg;base64,..."}
+      ถ้าถ่ายไม่สำเร็จ ส่ง {"type":"photo_error","floor":3,"slot":4,"phase":"test","msg":"..."}
   - ส่งสถานะเครือข่ายให้บอร์ดหลักทุก 3 วินาที (แสดง IP บนจอ OLED)
 
   บอร์ดที่ใช้: ESP32-S3 N16R8 CAM + OV2640 (แฟลช 16MB, PSRAM 8MB) ผังขาเหมือน Freenove ESP32-S3 CAM
@@ -71,6 +72,7 @@ String rxBoard;
 uint32_t lastNetMs = 0;
 
 void sendLog(const String &msg, int client = -1);
+void sendPhotoError(int floor, int slot, const char *phase, const String &msg);
 void handleBoardLine(String &line);
 
 // ==========================================
@@ -114,13 +116,13 @@ bool initCamera() {
 
 // ถ่ายภาพแล้วส่งให้เว็บทุกหน้า
 void snapAndSend(int floor, int slot, const char *phase) {
-  if (!camOk) { sendLog("กล้องไม่พร้อม ถ่ายภาพไม่ได้"); return; }
+  if (!camOk) { sendPhotoError(floor, slot, phase, "กล้องไม่พร้อม (เริ่มต้นกล้องไม่สำเร็จ ตรวจสายแพกล้อง)"); return; }
 
   // ทิ้งเฟรมเก่าที่ค้างในบัฟเฟอร์ เพื่อให้ได้ภาพ ณ ตอนนี้จริง ๆ
   camera_fb_t *fb = esp_camera_fb_get();
   if (fb) esp_camera_fb_return(fb);
   fb = esp_camera_fb_get();
-  if (!fb) { sendLog("ถ่ายภาพไม่สำเร็จ"); return; }
+  if (!fb) { sendPhotoError(floor, slot, phase, "ถ่ายภาพไม่สำเร็จ"); return; }
 
   size_t b64Len = 0;
   mbedtls_base64_encode(nullptr, 0, &b64Len, fb->buf, fb->len);   // หาขนาด
@@ -131,7 +133,7 @@ void snapAndSend(int floor, int slot, const char *phase) {
   size_t total = head.length() + b64Len + strlen(tail) + 1;
 
   char *msg = (char *)(psramFound() ? ps_malloc(total) : malloc(total));
-  if (!msg) { esp_camera_fb_return(fb); sendLog("หน่วยความจำไม่พอสำหรับภาพ"); return; }
+  if (!msg) { esp_camera_fb_return(fb); sendPhotoError(floor, slot, phase, "หน่วยความจำไม่พอสำหรับภาพ"); return; }
 
   memcpy(msg, head.c_str(), head.length());
   size_t written = 0;
@@ -159,6 +161,19 @@ void sendLog(const String &msg, int client) {
   serializeJson(d, s);
   if (client >= 0) ws.sendTXT(client, s);
   else ws.broadcastTXT(s);
+  Serial.println(s);
+}
+
+void sendPhotoError(int floor, int slot, const char *phase, const String &msg) {
+  JsonDocument d;
+  d["type"] = "photo_error";
+  d["floor"] = floor;
+  d["slot"] = slot;
+  d["phase"] = phase;
+  d["msg"] = msg;
+  String s;
+  serializeJson(d, s);
+  ws.broadcastTXT(s);
   Serial.println(s);
 }
 
@@ -197,7 +212,7 @@ void onWs(uint8_t num, WStype_t type, uint8_t *payload, size_t len) {
       if (deserializeJson(doc, line)) { sendLog("ได้ข้อความที่ไม่ใช่ JSON", num); break; }
       const char *cmd = doc["cmd"] | "";
       if (!strcmp(cmd, "capture")) {             // กล้องจัดการเอง
-        snapAndSend(doc["floor"] | 0, doc["slot"] | 0, "manual");
+        snapAndSend(doc["floor"] | 0, doc["slot"] | 0, doc["phase"] | "manual");
       } else {
         Board.println(line);                     // ส่งต่อให้บอร์ดหลัก
       }

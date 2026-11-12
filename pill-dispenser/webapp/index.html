@@ -246,6 +246,28 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px}
 .row .field{flex:1;min-width:120px}
 .log{margin-top:10px;font-family:var(--f-mono);font-size:.78rem;max-height:190px;overflow:auto;background:var(--surface-2);border-radius:8px;padding:8px 10px;display:grid;gap:3px}
+.checks{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px}
+.checks li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start;font-size:.9rem;line-height:1.35}
+.checks .ic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:.72rem;font-weight:700;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink-2);font-family:var(--f-mono)}
+.checks li.run .ic{border-color:var(--sky);color:var(--sky);animation:blink 1s ease-in-out infinite}
+.checks li.ok .ic{background:var(--ok);border-color:var(--ok);color:#fff}
+.checks li.fail .ic{background:var(--danger);border-color:var(--danger);color:#fff}
+.checks li.skip{opacity:.5}
+.checks small{display:block;color:var(--ink-2);font-size:.78rem}
+.checks li.fail small{color:var(--danger)}
+@keyframes blink{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.checks li.run .ic{animation:none}}
+.pill.bad{color:var(--danger)} .pill.bad::before{background:var(--danger)}
+.pill.run{color:var(--blue)} .pill.run::before{background:var(--sky)}
+.live-ir{margin-top:12px;font-size:.85rem;color:var(--ink-2);display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
+.live-ir b{font-family:var(--f-mono);color:var(--ink)}
+.test-shots{margin-top:12px}
+.cmd-form{display:flex;gap:8px;margin-top:12px}
+.cmd-form input{flex:1;min-width:0;font-family:var(--f-mono);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem}
+.cmd-form input:focus{outline:none;border-color:var(--sky);box-shadow:0 0 0 4px var(--sky-soft)}
+.cmd-help{font-size:.78rem;color:var(--ink-2);margin-top:6px;line-height:1.7}
+.cmd-help code{font-family:var(--f-mono);background:var(--surface-2);border-radius:4px;padding:0 5px;white-space:nowrap}
+.cam-test .photo{margin-top:12px}
 .parts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .parts span{font-size:.8rem;border:1px solid var(--line);border-radius:6px;padding:2px 8px}
 
@@ -442,7 +464,33 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
         </div>
 
         <div class="panel">
-          <h2>ทดสอบมอเตอร์</h2>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <h2>ทดสอบการทำงาน</h2><span class="pill" id="testPill">ยังไม่ได้ทดสอบ</span>
+          </div>
+          <div class="muted" style="font-size:.88rem">ทดสอบครบทุกขั้นกับช่องที่เลือก: หมุน ดันยา เซนเซอร์ ถ่ายภาพ เปิดเพลง และรอให้หยิบยา · ไม่บันทึกลงตารางยา</div>
+          <div class="row">
+            <div class="field"><label for="xFloor">ชั้น</label><select id="xFloor"></select></div>
+            <div class="field"><label for="xSlot">ช่อง</label><select id="xSlot"></select></div>
+            <button class="btn y" id="testBtn">เริ่มทดสอบ</button>
+            <button class="btn ghost" id="testCancel" hidden>ยกเลิก</button>
+          </div>
+          <ol class="checks" id="testSteps"></ol>
+          <div class="live-ir">ค่าเซนเซอร์ตรวจยาตอนนี้: <b id="irLive">— (ยังไม่ได้เชื่อมต่อ)</b></div>
+          <div class="photos test-shots" id="testShots"></div>
+        </div>
+
+        <div class="panel cam-test">
+          <h2>ทดสอบกล้อง</h2>
+          <div class="muted" style="font-size:.88rem">ถ่ายภาพ 1 ภาพจาก ESP32‑S3 CAM เพื่อตรวจว่ากล้องทำงาน และมุมกล้องเห็นถาดรับยา</div>
+          <div class="photo" id="camPreview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>ยังไม่มีภาพทดสอบ</b><span style="font-size:.82rem">กด “ถ่ายภาพทดสอบ” เมื่อเชื่อมต่อเครื่องแล้ว</span></div>
+          <div class="row">
+            <button class="btn" id="camTestBtn">ถ่ายภาพทดสอบ</button>
+            <span class="muted mono" id="camInfo" style="font-size:.82rem;align-self:center"></span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>ทดสอบมอเตอร์และคำสั่ง</h2>
           <div class="muted" style="font-size:.88rem">หมุนถาดทั้งแท่งให้ช่องที่เลือกตรงตัวดัน แล้วเลื่อนตัวดันยาไปที่ชั้นที่เลือก</div>
           <div class="row">
             <div class="field"><label for="tFloor">ชั้น</label><select id="tFloor"></select></div>
@@ -450,6 +498,11 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
             <button class="btn y" id="spinBtn">สั่งหมุน</button>
             <button class="btn" id="pushBtn">หมุนและดันยา</button>
           </div>
+          <form class="cmd-form" id="cmdForm" autocomplete="off">
+            <input id="cmdInput" aria-label="พิมพ์คำสั่ง" placeholder="พิมพ์คำสั่ง เช่น test 3 4" spellcheck="false">
+            <button class="btn" type="submit">ส่ง</button>
+          </form>
+          <div class="cmd-help"><code>test ชั้น ช่อง</code> ทดสอบครบวงจร · <code>goto ชั้น ช่อง</code> หมุนไป · <code>dispense ชั้น ช่อง</code> หมุนและดันยา · <code>photo</code> ถ่ายภาพทดสอบ · <code>ir</code> ค่าเซนเซอร์ · <code>stop</code> หยุดเพลง · <code>cancel</code> ยกเลิกการทดสอบ · <code>time</code> ตั้งเวลาเครื่อง · <code>sync</code> ส่งตารางเวลา · <code>help</code></div>
           <div class="log" id="log"></div>
         </div>
 
@@ -790,6 +843,132 @@ function command(cmd,f,s){
 }
 $("spinBtn").onclick=()=>{command("goto",+tf.value,+ts.value);toast("สั่งหมุนชั้น "+tf.value+" ช่อง "+ts.value+" แล้ว")};
 $("pushBtn").onclick=()=>{command("dispense",+tf.value,+ts.value);toast("สั่งจ่ายยาชั้น "+tf.value+" ช่อง "+ts.value+" แล้ว")};
+/* ---------- ทดสอบการทำงานครบวงจร ---------- */
+const xf=$("xFloor"),xs=$("xSlot");
+for(let i=1;i<=7;i++)xf.add(new Option("ชั้น "+i,i));for(let i=1;i<=6;i++)xs.add(new Option("ช่อง "+i,i));
+const TEST_STEPS=[["move","หมุนถาดและเลื่อนตัวดันไปที่ช่อง"],["push","ดันยาออกจากช่อง"],["pill","เซนเซอร์ตรวจพบยาในถาด"],
+  ["photo1","ถ่ายภาพที่ 1 (ตอนยาลงถาด)"],["ring","เปิดเพลงเตือน"],["taken","ตรวจพบว่าหยิบยาออกแล้ว"],["photo2","ถ่ายภาพที่ 2 (หลังหยิบยา)"]];
+let test=null;
+function setStep(k,state,msg){if(!test)return;test.st[k]={state,msg:msg||""};
+  clearTimeout(test.tmo[k]);
+  if(state==="run"&&(k==="photo1"||k==="photo2"))test.tmo[k]=setTimeout(()=>{if(test&&test.st[k].state==="run")setStep(k,"fail","ไม่ได้รับภาพจากกล้องภายใน 20 วินาที")},20000);
+  renderTest()}
+function renderTest(){
+  const ol=$("testSteps");ol.innerHTML="";const pill=$("testPill");
+  if(!test){pill.className="pill";pill.textContent="ยังไม่ได้ทดสอบ";$("testCancel").hidden=true;return}
+  TEST_STEPS.forEach(([k,lbl],i)=>{const st=test.st[k]||{state:"wait",msg:""};
+    const li=document.createElement("li");li.className=st.state;
+    const ic=document.createElement("span");ic.className="ic";ic.textContent=st.state==="ok"?"✓":st.state==="fail"?"✕":st.state==="skip"?"–":String(i+1);
+    const tx=document.createElement("div");tx.textContent=lbl;
+    if(st.msg){const sm=document.createElement("small");sm.textContent=st.msg;tx.appendChild(sm)}
+    li.append(ic,tx);ol.appendChild(li)});
+  const vals=TEST_STEPS.map(([k])=>(test.st[k]||{}).state||"wait");
+  const busy=vals.some(v=>v==="run")||!test.done;
+  const bad=vals.filter(v=>v==="fail").length;
+  $("testCancel").hidden=!!test.done;
+  if(busy){pill.className="pill run";pill.textContent="กำลังทดสอบ ชั้น "+test.f+" ช่อง "+test.s}
+  else if(bad){pill.className="pill bad";pill.textContent="ไม่ผ่าน "+bad+" ขั้น"}
+  else{pill.className="pill ok";pill.textContent="ผ่านทุกขั้น"}
+}
+function renderTestShots(){
+  const box=$("testShots");box.innerHTML="";if(!test)return;
+  [["test_dispensed","ตอนจ่ายยา"],["test_taken","หลังหยิบยา"]].forEach(([k,cap])=>{
+    const p=test.shots[k],fig=document.createElement("figure"),fc=document.createElement("figcaption");fc.textContent=cap;
+    if(p){const t=document.createElement("span");t.textContent=hm(new Date(p.at));fc.appendChild(t)}
+    const div=document.createElement("div");
+    if(p){div.className="photo has";const img=document.createElement("img");img.alt=cap;img.src=p.src;div.appendChild(img)}
+    else{div.className="photo";div.innerHTML='<b>ยังไม่มีภาพ</b>'}
+    fig.append(fc,div);box.appendChild(fig)});
+}
+function startTest(f,s){
+  if(!(f>=1&&f<=7&&s>=1&&s<=6)){toast("ชั้นต้องเป็น 1-7 และช่องต้องเป็น 1-6");return}
+  if(!sendCmd({cmd:"test",floor:f,slot:s})){addLog("ทดสอบไม่ได้: ยังไม่ได้เชื่อมต่อเครื่อง");toast("เชื่อมต่อเครื่องก่อน (ช่องที่อยู่ ESP32 ด้านบน)");return}
+  xf.value=f;xs.value=s;
+  test={f,s,st:{},tmo:{},shots:{},done:false};setStep("move","run");renderTestShots();
+  addLog("เริ่มทดสอบ ชั้น "+f+" ช่อง "+s+" · เตรียมใส่ยา 1 เม็ดในช่องนั้น");
+}
+function onTestMsg(m){
+  if(!test||test.f!==m.floor||test.s!==m.slot||m.step==="start"&&test.started){
+    if(m.step!=="start")return;
+    test={f:m.floor,s:m.slot,st:{},tmo:{},shots:{},done:false};renderTestShots();
+  }
+  const ok=!!m.ok,msg=m.msg||"";
+  switch(m.step){
+    case "start":test.started=true;setStep("move","run");break;
+    case "move":setStep("move",ok?"ok":"fail",msg);setStep("push","run");break;
+    case "push":setStep("push",ok?"ok":"fail",msg);setStep("pill","run","รอยาตกลงถาด…");break;
+    case "pill":setStep("pill",ok?"ok":"fail",msg);
+      if(ok)waitPhoto("photo1");else{setStep("photo1","skip","ไม่ได้ถ่าย เพราะไม่พบยา");setStep("photo2","skip")}break;
+    case "ring":setStep("ring",ok?"ok":"fail",msg);if(test.st.pill&&test.st.pill.state==="ok")setStep("taken","run","หยิบยาออกจากถาดได้เลย");break;
+    case "taken":setStep("taken",ok?"ok":(msg.startsWith("ข้าม")?"skip":"fail"),msg);
+      if(ok)waitPhoto("photo2");else if(!test.st.photo2||test.st.photo2.state==="wait")setStep("photo2","skip");break;
+    case "done":test.done=true;
+      for(const [k] of TEST_STEPS){const st=test.st[k];if(!st||st.state==="wait")test.st[k]={state:"skip",msg:""}}
+      renderTest();addLog("ทดสอบ ชั้น "+test.f+" ช่อง "+test.s+" จบแล้ว");break;
+  }
+}
+// ภาพอาจมาถึงก่อนหรือหลังข้อความของบอร์ดก็ได้ (กล้องกับบอร์ดหลักส่งแยกกัน)
+function waitPhoto(k){const st=test.st[k];if(st&&(st.state==="ok"||st.state==="fail"))return;setStep(k,"run","รอภาพจากกล้อง…")}
+function testPhoto(phase,src,err){
+  if(!test)return;const k=phase==="test_dispensed"?"photo1":"photo2";
+  if(err){setStep(k,"fail",err);return}
+  test.shots[phase]={src,at:Date.now()};setStep(k,"ok");renderTestShots();
+}
+$("testBtn").onclick=()=>startTest(+xf.value,+xs.value);
+$("testCancel").onclick=()=>{sendCmd({cmd:"cancel"});addLog("ส่งคำสั่งยกเลิกการทดสอบ")};
+
+/* ---------- ทดสอบกล้อง ---------- */
+let camT=null;
+function camTest(){
+  if(!sendCmd({cmd:"capture",floor:0,slot:0,phase:"test"})){addLog("ถ่ายภาพไม่ได้: ยังไม่ได้เชื่อมต่อเครื่อง");toast("เชื่อมต่อเครื่องก่อน (ช่องที่อยู่ ESP32 ด้านบน)");return}
+  $("camInfo").textContent="กำลังถ่ายภาพ…";addLog("ส่งคำสั่งถ่ายภาพทดสอบ");
+  clearTimeout(camT);camT=setTimeout(()=>{$("camInfo").textContent="ไม่ได้รับภาพภายใน 20 วินาที ตรวจกล้องและ Wi‑Fi"},20000);
+}
+function camShot(src,err){
+  clearTimeout(camT);
+  if(err){const box=$("camPreview");box.className="photo";
+    box.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>ถ่ายภาพไม่สำเร็จ</b>';
+    $("camInfo").textContent=err;return}
+  const box=$("camPreview");box.className="photo has";box.innerHTML="";
+  const img=document.createElement("img");img.alt="ภาพทดสอบจากกล้อง";img.src=src;box.appendChild(img);
+  const kb=Math.round(src.length*3/4/1024);
+  $("camInfo").textContent="ได้ภาพเวลา "+hm(new Date())+" · ประมาณ "+kb+" KB";addLog("กล้อง: ได้ภาพทดสอบ ("+kb+" KB)");
+}
+$("camTestBtn").onclick=camTest;
+
+/* ---------- ช่องพิมพ์คำสั่ง ---------- */
+const CMD_HELP=["test ชั้น ช่อง — ทดสอบครบวงจร (เช่น test 3 4)","goto ชั้น ช่อง — หมุนไปช่อง","dispense ชั้น ช่อง — หมุนและดันยา",
+  "photo — ถ่ายภาพทดสอบ","ir — ดูค่าเซนเซอร์ตรวจยา","stop — หยุดเพลง","cancel — ยกเลิกการทดสอบ","time — ตั้งเวลาเครื่องตามเว็บ",
+  "sync — ส่งตารางเวลาไปที่เครื่อง","{…} — ส่งคำสั่ง JSON ตรง ๆ"];
+const cmdHist=[];let cmdPos=0;
+function runCommand(line){
+  line=line.trim();if(!line)return;
+  cmdHist.push(line);cmdPos=cmdHist.length;addLog("> "+line);
+  if(line.startsWith("{")){let o;try{o=JSON.parse(line)}catch(e){addLog("JSON ไม่ถูกต้อง");return}
+    if(!sendCmd(o))addLog("ยังไม่ได้เชื่อมต่อเครื่อง");return}
+  const [w,...a]=line.toLowerCase().split(/\s+/),n=a.map(Number);
+  const pos=()=>{const ok=n[0]>=1&&n[0]<=7&&n[1]>=1&&n[1]<=6;if(!ok)addLog("ต้องระบุชั้น 1-7 และช่อง 1-6 เช่น "+w+" 3 4");return ok};
+  const need=o=>{if(!sendCmd(o))addLog("ยังไม่ได้เชื่อมต่อเครื่อง")};
+  switch(w){
+    case "test":case "ทดสอบ":if(pos())startTest(n[0],n[1]);break;
+    case "goto":case "หมุน":if(pos())command("goto",n[0],n[1]);break;
+    case "dispense":case "จ่าย":if(pos())command("dispense",n[0],n[1]);break;
+    case "photo":case "capture":case "ถ่าย":case "ถ่ายภาพ":camTest();break;
+    case "ir":case "sensor":need({cmd:"ir"});break;
+    case "stop":need({cmd:"stop"});break;
+    case "cancel":need({cmd:"cancel"});break;
+    case "time":{const t=new Date();need({cmd:"time",y:t.getFullYear(),mo:t.getMonth()+1,d:t.getDate(),h:t.getHours(),mi:t.getMinutes(),s:t.getSeconds()});break}
+    case "sync":case "schedule":need({cmd:"schedule",data:payload()});break;
+    case "help":case "?":CMD_HELP.slice().reverse().forEach(h=>addLog("  "+h));break;
+    default:addLog("ไม่รู้จักคำสั่ง “"+w+"” พิมพ์ help เพื่อดูคำสั่งทั้งหมด");
+  }
+}
+$("cmdForm").addEventListener("submit",e=>{e.preventDefault();runCommand($("cmdInput").value);$("cmdInput").value=""});
+$("cmdInput").addEventListener("keydown",e=>{
+  if(e.key==="ArrowUp"&&cmdPos>0){e.preventDefault();e.target.value=cmdHist[--cmdPos]}
+  else if(e.key==="ArrowDown"){e.preventDefault();cmdPos=Math.min(cmdHist.length,cmdPos+1);e.target.value=cmdHist[cmdPos]||""}
+});
+
 $("connectBtn").onclick=()=>connectESP($("espAddr").value);
 $("espAddr").onchange=e=>{save("p7_esp",e.target.value);$("liveAddr").value=e.target.value};
 $("liveAddr").onchange=e=>{save("p7_esp",e.target.value);$("espAddr").value=e.target.value};
@@ -1025,13 +1204,21 @@ function connectESP(addr){
   ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}
     if(m.type==="log"){addLog("ESP32: "+m.msg);return}
     if(m.type==="taken"&&m.floor&&m.slot){markTaken(m.floor,m.slot,m.at);addLog("เซนเซอร์: รับยาชั้น "+m.floor+" ช่อง "+m.slot+" แล้ว");return}
+    if(m.type==="test"){onTestMsg(m);return}
+    if(m.type==="photo_error"){const e=m.msg||"ถ่ายภาพไม่สำเร็จ";
+      if(m.phase==="test")camShot(null,e);else if(m.phase==="test_dispensed"||m.phase==="test_taken")testPhoto(m.phase,null,e);
+      addLog("กล้อง: "+e);return}
+    if(m.type==="photo"&&typeof m.img==="string"&&m.img.startsWith("data:image/")&&m.phase==="test"){camShot(m.img);return}
+    if(m.type==="photo"&&typeof m.img==="string"&&m.img.startsWith("data:image/")&&(m.phase==="test_dispensed"||m.phase==="test_taken")){
+      testPhoto(m.phase,m.img);addLog("กล้อง: ได้ภาพทดสอบ"+(m.phase==="test_taken"?"หลังหยิบยา":"ตอนจ่ายยา"));return}
     if(m.type==="photo"&&m.floor&&m.slot&&typeof m.img==="string"&&m.img.startsWith("data:image/")){setPhoto(m.floor,m.slot,m.img,m.phase);addLog("กล้อง: ได้ภาพ"+({dispensed:"ตอนจ่ายยา",taken:"หลังรับยา"}[m.phase]||"")+" ชั้น "+m.floor+" ช่อง "+m.slot);return}
     if(m.type==="status"){espClock=Date.now();if(m.rtc)$("rtc").textContent=m.rtc;
+      if(typeof m.ir==="number")$("irLive").textContent=m.ir+" · "+(m.pill?"มียาในถาด":"ถาดว่าง");
       if(m.floor&&m.slot&&(m.floor!==cur.f||m.slot!==cur.s))goto(m.floor,m.slot);return}
     if(m.floor&&m.slot){goto(m.floor,m.slot);if(m.state==="dispensing")pushNow();addLog("ESP32: ชั้น "+m.floor+" ช่อง "+m.slot+" · "+(ST[m.state]||m.state||""))}
   };
   ws.onerror=()=>{addLog("เชื่อมต่อ "+addr+" ไม่สำเร็จ ตรวจว่า ESP32 เปิดอยู่และใช้ Wi‑Fi เดียวกัน");toast("ยังไม่พบ ESP32")};
-  ws.onclose=()=>{if(ws===me){setPill(false,"โหมดจำลอง");espClock=0}};
+  ws.onclose=()=>{if(ws===me){setPill(false,"โหมดจำลอง");espClock=0;$("irLive").textContent="— (ยังไม่ได้เชื่อมต่อ)"}};
 }
 $("copyJson").onclick=()=>{const t=$("json").textContent;
   navigator.clipboard.writeText(t).then(()=>toast("คัดลอก JSON แล้ว"),()=>{const r=document.createRange();r.selectNodeContents($("json"));const s=getSelection();s.removeAllRanges();s.addRange(r);toast("เลือกข้อความแล้ว กด Ctrl+C เพื่อคัดลอก")})};

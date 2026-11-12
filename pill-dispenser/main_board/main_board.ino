@@ -13,12 +13,15 @@
     {"cmd":"dispense","floor":3,"slot":4}    หมุน + ดันยา
     {"cmd":"stop"}                           หยุดเพลง
     {"cmd":"ir"}                             ดูค่าเซนเซอร์ตรวจยา (ใช้ตั้งค่า)
+    {"cmd":"test","floor":3,"slot":4}        ทดสอบครบวงจร: หมุน ดัน เซนเซอร์ ภาพ เพลง หยิบยา ภาพ
+    {"cmd":"cancel"}                         ยกเลิกการทดสอบ
 
   ข้อความที่ส่งกลับไปเว็บ
     {"type":"status","rtc":"08:00:05","floor":3,"slot":4}     ทุก 2 วินาที
     {"floor":3,"slot":4,"state":"moving"|"ready"|"dispensing"}
     {"type":"taken","floor":3,"slot":4,"at":"2026-11-11T08:03:10"}
     {"type":"log","msg":"..."}
+    {"type":"test","floor":3,"slot":4,"step":"move"|"push"|"pill"|"ring"|"taken"|"done","ok":true,"msg":"..."}
     {"type":"snap","floor":3,"slot":4,"phase":"dispensed"|"taken"}   (ส่งให้กล้องถ่ายภาพ ไม่ส่งต่อไปเว็บ)
 
   ทดสอบใน Wokwi (ไม่มีกล้อง): พิมพ์คำสั่ง JSON ข้างบนลงใน Serial Monitor ได้เลย
@@ -85,6 +88,7 @@ const uint8_t  MAX_RINGS        = 3;               // เล่นเพลง�
 const uint32_t MISSED_MS        = 60UL * 60 * 1000;// เกิน 1 ชม. = ไม่ได้รับยา (ตรงกับเว็บ)
 const uint8_t  GRACE_MIN        = 2;               // ถ้าเลยเวลาไม่เกินกี่นาทียังจ่ายให้ (เช่น ไฟดับชั่วครู่)
 const uint32_t STATUS_MS        = 2000;
+const uint32_t TEST_TIMEOUT_MS  = 2UL * 60 * 1000;// โหมดทดสอบ: รอหยิบยาไม่เกิน 2 นาที
 
 // ==========================================
 // System States (เดิม)
@@ -130,10 +134,18 @@ Servo servoTray, servoPush;
 int curFloor = 1, curSlot = 1;   // ตำแหน่งตัวดัน / ช่องที่ตรงตัวดัน
 int liftFloor = 1;
 
+// โหมดของการจ่ายยา
+enum DoseMode : uint8_t {
+  MODE_SCHEDULED,   // มื้อจริงตามตาราง: เพลง + เตือนซ้ำ + แจ้งเว็บว่ารับยาแล้ว
+  MODE_MANUAL,      // ปุ่ม "หมุนและดันยา" ในเว็บ: ไม่มีเพลง ไม่บันทึกลงตาราง
+  MODE_TEST         // คำสั่ง test: ทดสอบครบทุกขั้น รายงานผลทีละขั้นให้เว็บ ไม่บันทึกลงตาราง
+};
+
 struct Dose {
   bool     active = false;
   int      f = 0, s = 0;          // 1-based
-  bool     scheduled = false;     // false = สั่งทดสอบจากเว็บ (ไม่เล่นเพลง)
+  uint8_t  mode = MODE_SCHEDULED;
+  bool     scheduled = false;     // mode == MODE_SCHEDULED
   bool     pillSeen = false;
   uint32_t startMs = 0, lastRingMs = 0, clearSinceMs = 0;
   uint8_t  rings = 0;
@@ -199,7 +211,10 @@ void moveTo(int f, int s);
 void pushPill();
 int  irRaw();
 bool pillPresent();
-void startDose(int f, int s, bool scheduled);
+void startDose(int f, int s, uint8_t mode);
+void testStep(const char *step, bool ok, const String &msg = "");
+void endDose();
+const char *photoPhase(const char *phase);
 void ring();
 void markDone(int f, int s, uint8_t st);
 void updateDose();
@@ -440,10 +455,20 @@ void handleLine(String &line) {
   } else if (!strcmp(cmd, "goto")) {
     if (validPos(f, s)) moveTo(f, s);
   } else if (!strcmp(cmd, "dispense")) {
-    if (validPos(f, s)) startDose(f, s, false);
+    if (validPos(f, s)) startDose(f, s, MODE_MANUAL);
+  } else if (!strcmp(cmd, "test")) {
+    if (validPos(f, s)) startDose(f, s, MODE_TEST);
+    else sendLog("คำสั่ง test ต้องระบุชั้น 1-7 และช่อง 1-6");
+  } else if (!strcmp(cmd, "cancel")) {
+    if (dose.active && !dose.scheduled) {
+      stopRequested = true;
+      if (dose.mode == MODE_TEST) { testStep("taken", false, "ยกเลิกการทดสอบ"); testStep("done", false); }
+      sendLog("ยกเลิกแล้ว");
+      endDose();
+    }
   } else if (!strcmp(cmd, "capture")) {
     // ปกติกล้องจัดการเอง ถ้ามาถึงบอร์ดนี้ (เช่นทดสอบใน Wokwi) ให้ขอภาพผ่าน UART
-    if (validPos(f, s)) requestPhoto(f, s, "manual");
+    requestPhoto(f, s, doc["phase"] | "manual");
   } else if (!strcmp(cmd, "ir")) {
     sendLog("ค่าเซนเซอร์ตรวจยา = " + String(irRaw()) + (pillPresent() ? " (มียา)" : " (ไม่มียา)"));
   } else if (!strcmp(cmd, "stop")) {
@@ -518,7 +543,7 @@ void checkAlarms(DateTime now) {
       if (!a.active || a.done != PENDING) continue;
       int due = a.hour * 60 + a.minute;
       if (nowMin >= due && nowMin <= due + GRACE_MIN) {
-        startDose(f + 1, s + 1, true);
+        startDose(f + 1, s + 1, MODE_SCHEDULED);
         return;            // ทีละมื้อ
       }
       if (nowMin > due + GRACE_MIN) {   // เลยเวลาไปนาน (เครื่องปิดอยู่) ไม่จ่ายย้อนหลัง
@@ -602,20 +627,49 @@ bool pillPresent() {
 // ==========================================
 // ติดตามมื้อยา: จ่าย -> ถ่ายภาพ -> เพลง -> เตือนซ้ำ -> หยิบแล้ว -> ถ่ายภาพ
 // ==========================================
-void startDose(int f, int s, bool scheduled) {
+// รายงานผลการทดสอบทีละขั้นให้เว็บ (เฉพาะโหมดทดสอบ)
+void testStep(const char *step, bool ok, const String &msg) {
+  if (dose.mode != MODE_TEST) return;
+  JsonDocument d;
+  d["type"] = "test";
+  d["floor"] = dose.f;
+  d["slot"] = dose.s;
+  d["step"] = step;
+  d["ok"] = ok;
+  if (msg.length()) d["msg"] = msg;
+  sendJson(d);
+}
+
+// โหมดทดสอบ/สั่งเองจากเว็บ ใช้ชื่อภาพต่างจากมื้อจริง เพื่อไม่ให้ไปทับภาพในตารางยา
+const char *photoPhase(const char *phase) {
+  if (dose.scheduled) return phase;
+  return !strcmp(phase, "taken") ? "test_taken" : "test_dispensed";
+}
+
+void endDose() {
+  dose.active = false;
+}
+
+void startDose(int f, int s, uint8_t mode) {
   if (dose.active) {   // มื้อก่อนยังไม่จบ: ปิดมื้อเก่าก่อน
     if (dose.scheduled) markDone(dose.f, dose.s, MISSED);
-    sendLog("ปิดมื้อชั้น " + String(dose.f) + " ช่อง " + String(dose.s) + " เพราะถึงมื้อใหม่");
+    if (dose.mode == MODE_TEST) { testStep("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); testStep("done", false); }
+    sendLog("ปิดงานชั้น " + String(dose.f) + " ช่อง " + String(dose.s) + " เพราะมีงานใหม่");
   }
-  moveTo(f, s);
-  pushPill();
-  if (scheduled) markDone(f, s, DISPENSED);
-
   dose = Dose();
-  dose.active = true;
   dose.f = f;
   dose.s = s;
-  dose.scheduled = scheduled;
+  dose.mode = mode;
+  dose.scheduled = (mode == MODE_SCHEDULED);
+  testStep("start", true);
+
+  moveTo(f, s);
+  testStep("move", true);
+  pushPill();
+  testStep("push", true);
+  if (dose.scheduled) markDone(f, s, DISPENSED);
+
+  dose.active = true;
   dose.startMs = millis();
 
   // รอให้ยาตกลงถาด
@@ -624,12 +678,25 @@ void startDose(int f, int s, bool scheduled) {
     delay(20);
   }
   if (dose.pillSeen) {
-    requestPhoto(f, s, "dispensed");          // ภาพที่ 1: ตอนยาลงถาด
+    requestPhoto(f, s, photoPhase("dispensed"));          // ภาพที่ 1: ตอนยาลงถาด
     sendLog("ยาลงถาดแล้ว ชั้น " + String(f) + " ช่อง " + String(s));
+    testStep("pill", true, "ค่าเซนเซอร์ " + String(irRaw()));
   } else {
     sendLog("เซนเซอร์ไม่พบยาในถาด ชั้น " + String(f) + " ช่อง " + String(s) + " ตรวจช่องยา/เซนเซอร์");
+    testStep("pill", false, "ไม่พบยาภายใน " + String(PILL_DETECT_MS / 1000) + " วินาที (ค่าเซนเซอร์ " + String(irRaw()) + ")");
   }
-  if (scheduled) ring();
+
+  if (dose.mode == MODE_TEST) {
+    testStep("ring", true);
+    ring();                       // เพลงเล่นเมื่อ loop() วนกลับไป
+    if (!dose.pillSeen) {         // ไม่มียาในถาด: ทดสอบขั้นหยิบยาต่อไม่ได้
+      testStep("taken", false, "ข้าม เพราะไม่พบยาในถาด");
+      testStep("done", false);
+      endDose();
+    }
+  } else if (dose.scheduled) {
+    ring();
+  }
 }
 
 void ring() {
@@ -650,38 +717,51 @@ void updateDose() {
   if (!dose.pillSeen) {
     if (present) {              // ยามาถึงช้า
       dose.pillSeen = true;
-      requestPhoto(dose.f, dose.s, "dispensed");
+      requestPhoto(dose.f, dose.s, photoPhase("dispensed"));
     }
   } else if (!present) {
     if (!dose.clearSinceMs) dose.clearSinceMs = millis();
     if (millis() - dose.clearSinceMs >= TAKEN_DEBOUNCE) {
-      DateTime now = rtc.now();
-      JsonDocument d;
-      d["type"] = "taken";
-      d["floor"] = dose.f;
-      d["slot"] = dose.s;
-      d["at"] = isoDateTime(now);
-      sendJson(d);
-      requestPhoto(dose.f, dose.s, "taken");   // ภาพที่ 2: หลังหยิบยา
-      if (dose.scheduled) markDone(dose.f, dose.s, TAKEN);
-      dose.active = false;
+      if (dose.scheduled) {     // มื้อจริงเท่านั้นที่แจ้งเว็บให้บันทึกว่ารับยาแล้ว
+        DateTime now = rtc.now();
+        JsonDocument d;
+        d["type"] = "taken";
+        d["floor"] = dose.f;
+        d["slot"] = dose.s;
+        d["at"] = isoDateTime(now);
+        sendJson(d);
+        markDone(dose.f, dose.s, TAKEN);
+      } else {
+        sendLog("หยิบยาออกจากถาดแล้ว (ทดสอบ) ชั้น " + String(dose.f) + " ช่อง " + String(dose.s));
+      }
+      requestPhoto(dose.f, dose.s, photoPhase("taken"));   // ภาพที่ 2: หลังหยิบยา
+      testStep("taken", true);
+      testStep("done", true);
+      endDose();
       return;
     }
   } else {
     dose.clearSinceMs = 0;
   }
 
-  // เปิดเพลงซ้ำถ้ายังมียาค้าง
+  // เปิดเพลงซ้ำถ้ายังมียาค้าง (มื้อจริงเท่านั้น)
   if (dose.scheduled && dose.pillSeen && present && dose.rings < MAX_RINGS &&
       millis() - dose.lastRingMs >= REMIND_MS && currentState == HOME) {
     sendLog("ยังไม่ได้หยิบยา เตือนครั้งที่ " + String(dose.rings + 1));
     ring();
   }
 
+  if (dose.mode == MODE_TEST && millis() - dose.startMs >= TEST_TIMEOUT_MS) {
+    testStep("taken", false, "ไม่ได้หยิบยาภายใน 2 นาที");
+    testStep("done", false);
+    endDose();
+    return;
+  }
+
   if (millis() - dose.startMs >= MISSED_MS) {
     if (dose.scheduled) markDone(dose.f, dose.s, MISSED);
     sendLog("ไม่ได้รับยา ชั้น " + String(dose.f) + " ช่อง " + String(dose.s));
-    dose.active = false;
+    endDose();
   }
 }
 
@@ -736,7 +816,7 @@ void handleButtons() {
     int f, s;
     if (nextDose(rtc.now(), f, s)) {
       sendLog("กดปุ่มทดสอบ: จ่ายมื้อถัดไปทันที");
-      startDose(f, s, true);
+      startDose(f, s, MODE_SCHEDULED);
     } else {
       tone(BUZ_PIN, 400, 200);   // ไม่มีมื้อที่ตั้งไว้
     }
@@ -908,7 +988,7 @@ void drawSetTime() {
 void drawAlarmRinging() {
   display.setTextSize(2);
   display.setCursor(10, 10);
-  display.println("TAKE PILL");
+  display.println(dose.mode == MODE_TEST ? "TEST" : "TAKE PILL");
   display.setTextSize(1);
   display.setCursor(10, 35);
   display.print("Floor "); display.print(dose.f);

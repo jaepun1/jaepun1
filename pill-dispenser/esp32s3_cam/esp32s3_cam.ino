@@ -8,6 +8,8 @@
       {"type":"photo","floor":3,"slot":4,"phase":"dispensed","at":12345,"img":"data:image/jpeg;base64,..."}
       ถ้าถ่ายไม่สำเร็จ ส่ง {"type":"photo_error","floor":3,"slot":4,"phase":"test","msg":"..."}
   - ส่งสถานะเครือข่ายให้บอร์ดหลักทุก 3 วินาที (แสดง IP บนจอ OLED)
+  - ดึงเวลาประเทศไทยจากอินเทอร์เน็ต (NTP) ส่งให้บอร์ดหลักตอนเปิดเครื่องและทุก 10 นาที
+      {"cmd":"time","y":2026,"mo":11,"d":13,"h":8,"mi":0,"s":0,"src":"ntp"}
 
   บอร์ดที่ใช้: ESP32-S3 N16R8 CAM + OV2640 (แฟลช 16MB, PSRAM 8MB) ผังขาเหมือน Freenove ESP32-S3 CAM
   Arduino IDE > Tools
@@ -26,6 +28,7 @@
 #include <ArduinoJson.h>
 #include "esp_camera.h"
 #include "mbedtls/base64.h"
+#include <time.h>
 
 // ==========================================
 // ตั้งค่า Wi-Fi
@@ -36,6 +39,17 @@ const char *HOSTNAME  = "pill";            // ws://pill.local:81
 // ถ้าต่อ Wi-Fi ไม่ได้ จะเปิดฮอตสปอตของตัวเองแทน: ชื่อ PillDispenser รหัส 12345678 -> ws://192.168.4.1:81
 const char *AP_SSID = "PillDispenser";
 const char *AP_PASS = "12345678";
+
+// ==========================================
+// เวลาจากอินเทอร์เน็ต (NTP) ส่งให้บอร์ดหลัก
+// ==========================================
+const char *TZ_INFO = "ICT-7";            // เวลาประเทศไทย UTC+7
+const char *NTP1 = "pool.ntp.org";
+const char *NTP2 = "time.google.com";
+const uint32_t TIME_SYNC_MS = 10UL * 60 * 1000;   // ส่งเวลาให้บอร์ดหลักทุก 10 นาที
+bool ntpStarted = false;
+uint32_t lastTimeSentMs = 0, lastTimeTryMs = 0;
+bool timeSentOnce = false;
 
 // ==========================================
 // UART ไปบอร์ดหลัก (ไขว้ TX<->RX และต่อ GND ร่วม)
@@ -177,6 +191,25 @@ void sendPhotoError(int floor, int slot, const char *phase, const String &msg) {
   Serial.println(s);
 }
 
+// ส่งเวลาปัจจุบันให้บอร์ดหลัก (รูปแบบเดียวกับคำสั่ง time ของเว็บ)
+bool sendTimeToBoard() {
+  struct tm t;
+  if (!getLocalTime(&t, 0) || t.tm_year + 1900 < 2024) return false;   // ยังไม่ได้เวลาจาก NTP
+  JsonDocument d;
+  d["cmd"] = "time";
+  d["y"] = t.tm_year + 1900;
+  d["mo"] = t.tm_mon + 1;
+  d["d"] = t.tm_mday;
+  d["h"] = t.tm_hour;
+  d["mi"] = t.tm_min;
+  d["s"] = t.tm_sec;
+  d["src"] = "ntp";
+  String s;
+  serializeJson(d, s);
+  Board.println(s);
+  return true;
+}
+
 void sendNetToBoard() {
   JsonDocument d;
   d["type"] = "net";
@@ -269,6 +302,8 @@ void startWifi() {
     WiFi.setSleep(false);
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
+    configTzTime(TZ_INFO, NTP1, NTP2);      // เริ่มดึงเวลาจากอินเทอร์เน็ต
+    ntpStarted = true;
   } else {
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_SSID, AP_PASS);
@@ -303,5 +338,19 @@ void loop() {
     sendNetToBoard();
     // หลุด Wi-Fi บ้าน: ลองต่อใหม่
     if (WiFi.getMode() == WIFI_STA && WiFi.status() != WL_CONNECTED) WiFi.reconnect();
+  }
+
+  // ส่งเวลาให้บอร์ดหลัก: ครั้งแรกทันทีที่ได้เวลา (ลองทุก 2 วินาที) จากนั้นทุก 10 นาที
+  if (ntpStarted) {
+    uint32_t wait = timeSentOnce ? TIME_SYNC_MS : 2000;
+    uint32_t since = timeSentOnce ? millis() - lastTimeSentMs : millis() - lastTimeTryMs;
+    if (since >= wait) {
+      lastTimeTryMs = millis();
+      if (sendTimeToBoard()) {
+        if (!timeSentOnce) Serial.println("ได้เวลาจากอินเทอร์เน็ตแล้ว ส่งให้บอร์ดหลัก");
+        timeSentOnce = true;
+        lastTimeSentMs = millis();
+      }
+    }
   }
 }

@@ -40,7 +40,12 @@
 #define OLED_RESET    -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-RTC_DS1307 rtc;            // เครื่องจริงใช้ DS3231 ให้เปลี่ยนเป็น RTC_DS3231 (ดูหมายเหตุใน setup)
+RTC_DS1307 rtc;            // ใช้ได้ทั้ง DS1307 และ DS3231 (เก็บเวลาในรีจิสเตอร์ตำแหน่งเดียวกัน) ไม่ต้องแก้โค้ด
+// แหล่งเวลา: กล้อง ESP32-S3 CAM ดึงเวลาจากอินเทอร์เน็ต (NTP) แล้วส่งมาทุก 10 นาที / เว็บส่งมาตอนเชื่อมต่อ
+// RTC ช่วยจำเวลาตอนไฟดับ ถ้าไม่มี RTC เครื่องจะใช้นาฬิกาในบอร์ดแทน และรอเวลาจากกล้อง
+bool rtcOk = false;
+uint32_t swBaseUnix = 0, swBaseMs = 0;   // นาฬิกาในบอร์ด (ใช้เมื่อไม่มี RTC)
+bool timeValid = false;                  // ได้เวลาที่ถูกต้องแล้วหรือยัง
 
 // ==========================================
 // ขา Pin (ESP32 DevKit)
@@ -211,6 +216,8 @@ void moveTo(int f, int s);
 void pushPill();
 int  irRaw();
 bool pillPresent();
+DateTime clockNow();
+void clockSet(const DateTime &t);
 void startDose(int f, int s, uint8_t mode);
 void testStep(const char *step, bool ok, const String &msg = "");
 void endDose();
@@ -260,13 +267,13 @@ void setup() {
   }
   display.clearDisplay();
 
-  if (!rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    for (;;);
-  }
-  // DS1307 ใช้ isrunning() · ถ้าเปลี่ยนเป็น DS3231 ให้ใช้ if (rtc.lostPower()) แทน
-  if (!rtc.isrunning()) {
+  rtcOk = rtc.begin();
+  if (!rtcOk) {
+    Serial.println("ไม่พบ RTC ใช้นาฬิกาในบอร์ดแทน รอเวลาจากกล้อง/เว็บ");
+  } else if (!rtc.isrunning()) {           // DS1307 ที่ยังไม่เคยตั้งเวลา
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  } else {
+    timeValid = clockNow().year() >= 2024;  // RTC มีถ่านและเคยตั้งเวลาแล้ว
   }
 
   servoTray.setPeriodHertz(50);
@@ -286,7 +293,7 @@ void setup() {
 }
 
 void loop() {
-  DateTime now = rtc.now();
+  DateTime now = clockNow();
 
   pollComms();
   updateDose();
@@ -395,6 +402,8 @@ void sendStatus(const DateTime &now) {
   d["slot"] = curSlot;
   d["pill"] = pillPresent();
   d["ir"] = irRaw();         // ค่าดิบของเซนเซอร์ ใช้ตั้ง IR_THRESHOLD
+  d["clock"] = rtcOk ? "rtc" : "board";
+  d["timeok"] = timeValid;
   sendJson(d);
 }
 
@@ -447,9 +456,13 @@ void handleLine(String &line) {
   int f = doc["floor"] | 0, s = doc["slot"] | 0;
 
   if (!strcmp(cmd, "time")) {
-    rtc.adjust(DateTime(doc["y"] | 2026, doc["mo"] | 1, doc["d"] | 1,
-                        doc["h"] | 0, doc["mi"] | 0, doc["s"] | 0));
-    sendLog("ตั้งเวลาเครื่องตามเว็บแล้ว " + hms(rtc.now()));
+    DateTime t(doc["y"] | 2026, doc["mo"] | 1, doc["d"] | 1, doc["h"] | 0, doc["mi"] | 0, doc["s"] | 0);
+    bool ntp = !strcmp(doc["src"] | "", "ntp");      // กล้องส่งมาเองทุก 10 นาที
+    long diff = (long)t.unixtime() - (long)clockNow().unixtime();
+    if (!ntp || !timeValid || diff > 1 || diff < -1) {   // NTP: ปรับเฉพาะเมื่อเวลาคลาดเกิน 1 วินาที
+      clockSet(t);
+      sendLog(String(ntp ? "ตั้งเวลาจากอินเทอร์เน็ต (NTP) " : "ตั้งเวลาเครื่องตามเว็บแล้ว ") + hms(clockNow()));
+    }
   } else if (!strcmp(cmd, "schedule")) {
     applySchedule(doc["data"].as<JsonObject>());
   } else if (!strcmp(cmd, "goto")) {
@@ -534,6 +547,7 @@ void applySchedule(JsonObject data) {
 
 // หาว่ามีมื้อไหนถึงเวลาจ่าย
 void checkAlarms(DateTime now) {
+  if (!timeValid) return;   // ยังไม่ได้เวลาจริง (ไม่มี RTC และยังไม่ได้เวลาจากกล้อง) อย่าเพิ่งจ่ายยา
   String today = isoDate(now);
   int nowMin = now.hour() * 60 + now.minute();
   for (int f = 0; f < 7; f++) {
@@ -613,6 +627,21 @@ int irRaw() {
   long sum = 0;
   for (int i = 0; i < 8; i++) sum += analogRead(IR_PIN);
   return sum / 8;
+}
+
+// ==========================================
+// นาฬิกา: ใช้ RTC ถ้ามี ไม่มีก็ใช้นาฬิกาในบอร์ด
+// ==========================================
+DateTime clockNow() {
+  if (rtcOk) return rtc.now();
+  return DateTime(swBaseUnix + (millis() - swBaseMs) / 1000);
+}
+
+void clockSet(const DateTime &t) {
+  if (rtcOk) rtc.adjust(t);
+  swBaseUnix = t.unixtime();
+  swBaseMs = millis();
+  timeValid = true;
 }
 
 bool pillPresent() {
@@ -723,7 +752,7 @@ void updateDose() {
     if (!dose.clearSinceMs) dose.clearSinceMs = millis();
     if (millis() - dose.clearSinceMs >= TAKEN_DEBOUNCE) {
       if (dose.scheduled) {     // มื้อจริงเท่านั้นที่แจ้งเว็บให้บันทึกว่ารับยาแล้ว
-        DateTime now = rtc.now();
+        DateTime now = clockNow();
         JsonDocument d;
         d["type"] = "taken";
         d["floor"] = dose.f;
@@ -814,7 +843,7 @@ void handleButtons() {
   bool t = digitalRead(BTN_TEST);
   if (t == LOW && lastTest == HIGH) {
     int f, s;
-    if (nextDose(rtc.now(), f, s)) {
+    if (nextDose(clockNow(), f, s)) {
       sendLog("กดปุ่มทดสอบ: จ่ายมื้อถัดไปทันที");
       startDose(f, s, DOSE_SCHEDULED);
     } else {

@@ -19,8 +19,8 @@
     Flash Size: "16MB (128Mb)"
     PSRAM: "OPI PSRAM"
     Partition Scheme: "16M Flash (3MB APP/9.9MB FATFS)"
-    USB CDC On Boot: "Disabled"  แล้วเสียบสาย USB ช่องที่เขียนว่า COM (หรือ UART) เพื่ออัปโหลดและดู Serial Monitor
-      (ถ้าเสียบช่อง USB/OTG ให้ตั้ง USB CDC On Boot เป็น "Enabled" แทน)
+    USB CDC On Boot: "Enabled"  เมื่อเสียบสายช่อง USB (native) ← บอร์ดนี้ใช้แบบนี้แล้วเห็นข้อความใน Serial Monitor
+      (ถ้าเสียบช่องที่เขียนว่า COM/UART ให้ตั้งเป็น "Disabled")
   ไลบรารี: WebSockets (Markus Sattler), ArduinoJson (Benoit Blanchon) v7
 */
 
@@ -122,7 +122,7 @@ bool initCamera() {
   c.frame_size = FRAMESIZE_VGA;     // 640x480 ภาพละ ~20-40 KB
   c.jpeg_quality = 14;              // 10-63 ตัวเลขมาก = ไฟล์เล็ก
   c.fb_count = 1;
-  c.grab_mode = CAMERA_GRAB_LATEST;
+  c.grab_mode = CAMERA_GRAB_WHEN_EMPTY;   // ถ่ายเฉพาะตอนขอภาพ ไม่ให้กล้องเขียนหน่วยความจำตลอดเวลา (กัน CORRUPT HEAP ตอนต่อ Wi-Fi)
   if (psramFound()) {
     c.fb_location = CAMERA_FB_IN_PSRAM;
   } else {
@@ -421,16 +421,17 @@ void setup() {
   Board.setRxBufferSize(4096);
   Board.begin(115200, SERIAL_8N1, BOARD_RX_PIN, BOARD_TX_PIN);
 
-#if USE_CAMERA
-  bootStep("[2/4] เปิดกล้อง...");
-  camOk = initCamera();
-  bootStep(camOk ? "[2/4] เปิดกล้องสำเร็จ" : "[2/4] เปิดกล้องไม่สำเร็จ (ทำงานต่อโดยไม่มีกล้อง)");
-#else
-  bootStep("[2/4] ข้ามกล้อง (USE_CAMERA = 0)");
-#endif
-
-  bootStep("[3/4] ต่อ Wi-Fi...");
+  // ต่อ Wi-Fi ก่อนเปิดกล้อง ให้ Wi-Fi จองหน่วยความจำก่อน
+  bootStep("[2/4] ต่อ Wi-Fi...");
   startWifi();
+
+#if USE_CAMERA
+  bootStep("[3/4] เปิดกล้อง...");
+  camOk = initCamera();
+  bootStep(camOk ? "[3/4] เปิดกล้องสำเร็จ" : "[3/4] เปิดกล้องไม่สำเร็จ (ทำงานต่อโดยไม่มีกล้อง)");
+#else
+  bootStep("[3/4] ข้ามกล้อง (USE_CAMERA = 0)");
+#endif
 
   bootStep("[4/4] เปิด WebSocket");
   ws.begin();

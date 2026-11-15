@@ -17,7 +17,7 @@
   Arduino IDE > Tools
     Board: "ESP32S3 Dev Module"
     Flash Size: "16MB (128Mb)"
-    PSRAM: "OPI PSRAM"
+    PSRAM: "Disabled"  ← บอร์ดนี้เปิด PSRAM แล้วเกิด CORRUPT HEAP / รีเซ็ตเอง ปิดแล้วนิ่ง (ภาพจะเป็น 320x240)
     Partition Scheme: "16M Flash (3MB APP/9.9MB FATFS)"
     USB CDC On Boot: "Enabled"  เมื่อเสียบสายช่อง USB (native) ← บอร์ดนี้ใช้แบบนี้แล้วเห็นข้อความใน Serial Monitor
       (ถ้าเสียบช่องที่เขียนว่า COM/UART ให้ตั้งเป็น "Disabled")

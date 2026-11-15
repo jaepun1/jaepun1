@@ -67,8 +67,9 @@
 - ค่าที่ต้องปรับให้ตรงกับเครื่องจริงอยู่ส่วน "ค่าที่ปรับได้" ด้านบนของไฟล์ ได้แก่ `TRAY_ANGLE` (มุมของแต่ละช่อง), `PUSH_OUT`, `LIFT_MS_PER_FLOOR` (เวลาที่ใช้เลื่อน 1 ชั้น) และ `IR_THRESHOLD` / `IR_PILL_WHEN_LOW` (ดูหัวข้อเซนเซอร์ตรวจยาด้านล่าง)
 
 ### ESP32-S3 CAM
-- Board: **ESP32S3 Dev Module**, Flash Size: **16MB**, PSRAM: **OPI PSRAM**, Partition: **16M Flash (3MB APP/9.9MB FATFS)**
-- เสียบสาย USB ช่องที่เขียนว่า **COM** (หรือ UART) และตั้ง USB CDC On Boot: **Disabled** ถ้าเสียบช่อง **USB** (OTG) ให้ตั้งเป็น **Enabled** แทน ไม่อย่างนั้น Serial Monitor จะไม่ขึ้นข้อความ
+- Board: **ESP32S3 Dev Module**, Flash Size: **16MB**, PSRAM: **Disabled**, Partition: **16M Flash (3MB APP/9.9MB FATFS)**
+- **PSRAM ต้องตั้งเป็น Disabled**: บอร์ดที่ใช้ทดสอบ ถ้าเปิด OPI PSRAM จะเกิด `CORRUPT HEAP` แล้วรีเซ็ตเองตอนต่อ Wi-Fi หรือตอนถ่ายภาพ ปิดแล้วทำงานนิ่ง ภาพจะเป็นขนาด 320×240
+- **USB CDC On Boot**: ถ้าเสียบสายช่อง **USB** (native) ให้ตั้ง **Enabled** (บอร์ดที่ทดสอบใช้แบบนี้) ถ้าเสียบช่อง **COM**/UART ให้ตั้ง **Disabled** ถ้าตั้งไม่ตรง Serial Monitor จะเห็นแค่ข้อความระบบ ไม่เห็นข้อความของโปรแกรม
 - ถ้าอัปโหลดไม่ขึ้น ให้กดปุ่ม BOOT ค้างไว้ แล้วกด RST 1 ครั้ง จากนั้นค่อยปล่อย BOOT
 - ไลบรารี: **WebSockets** (Markus Sattler), **ArduinoJson (v7)**
 - แก้ `WIFI_SSID` / `WIFI_PASS` ถ้าต่อ Wi-Fi ไม่ได้ กล้องจะเปิดฮอตสปอต `PillDispenser` (รหัส `12345678`) ให้แทน ที่อยู่คือ `ws://192.168.4.1:81`

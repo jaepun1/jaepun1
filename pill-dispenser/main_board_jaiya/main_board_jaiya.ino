@@ -92,6 +92,10 @@ const unsigned long delay_Y[6] = {
 enum State { HOME, MENU, SET_TIME, SET_ALARM, ALARM_RINGING, MOVING_TO_BOX };
 State currentState = HOME;
 
+// [เพิ่ม] ประเภทงานที่เครื่องกำลังทำ (ต้องประกาศไว้ด้านบน ก่อนฟังก์ชันแรก)
+enum DoseMode { DM_NONE, DM_SCHEDULED, DM_MANUAL, DM_TEST };
+DoseMode doseMode = DM_NONE;
+
 // --- Joystick Variables ---
 int menuIndex = 0;
 bool buttonPressed = false;
@@ -171,8 +175,6 @@ const uint8_t       MAX_RINGS = 3;                   // เล่นเพลง
 const unsigned long MISSED_MS = 60UL * 60 * 1000;    // เกิน 1 ชม. = ไม่ได้รับยา
 const unsigned long TEST_TIMEOUT_MS = 2UL * 60 * 1000;
 
-enum DoseMode { DM_NONE, DM_SCHEDULED, DM_MANUAL, DM_TEST };
-DoseMode doseMode = DM_NONE;
 bool moveOnly = false;            // goto: ไปช่องอย่างเดียว
 bool doseActive = false;          // กำลังรอให้หยิบยา
 bool pillSeen = false;
@@ -198,7 +200,7 @@ void webSnap(const char *phase) {        // ให้กล้องถ่าย
   sendJson(d);
 }
 
-void webTest(const char *step, bool ok, const String &msg = "") {   // รายงานผลทดสอบทีละขั้น
+void webTest(const char *step, bool ok, const String &msg) {   // รายงานผลทดสอบทีละขั้น
   if (doseMode != DM_TEST) return;
   JsonDocument d;
   d["type"] = "test"; d["floor"] = activeAlarmDay + 1; d["slot"] = activeAlarmSlot + 1;
@@ -234,7 +236,7 @@ void endDose() { doseActive = false; doseMode = DM_NONE; }
 void startJob(int day, int slot, DoseMode mode, bool onlyMove) {
   if (currentState == ALARM_RINGING || currentState == MOVING_TO_BOX) { webLog("เครื่องกำลังทำงานอยู่"); return; }
   if (doseActive) {                                   // ปิดงานเก่าที่ยังรอหยิบยา
-    if (doseMode == DM_TEST) { webTest("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); webTest("done", false); }
+    if (doseMode == DM_TEST) { webTest("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); webTest("done", false, ""); }
     endDose();
   }
   activeAlarmDay = day;
@@ -291,8 +293,8 @@ void updateDose() {
         webLog("หยิบยาออกจากถาดแล้ว " + slotName(activeAlarmDay, activeAlarmSlot));
       }
       webSnap("taken");                                            // ภาพที่ 2
-      webTest("taken", true);
-      webTest("done", true);
+      webTest("taken", true, "");
+      webTest("done", true, "");
       endDose();
       return;
     }
@@ -308,7 +310,7 @@ void updateDose() {
 
   if (doseMode == DM_TEST && millis() - doseStartMs >= TEST_TIMEOUT_MS) {
     webTest("taken", false, "ไม่ได้หยิบยาภายใน 2 นาที");
-    webTest("done", false);
+    webTest("done", false, "");
     endDose();
     return;
   }
@@ -385,7 +387,7 @@ void handleJsonCommand(String line) {
   }
   else if (!strcmp(cmd, "cancel")) {
     if (doseActive && doseMode != DM_SCHEDULED) {
-      if (doseMode == DM_TEST) { webTest("taken", false, "ยกเลิกการทดสอบ"); webTest("done", false); }
+      if (doseMode == DM_TEST) { webTest("taken", false, "ยกเลิกการทดสอบ"); webTest("done", false, ""); }
       endDose();
       webLog("ยกเลิกแล้ว");
     }
@@ -612,11 +614,11 @@ void loop() {
       break;
       
     case MOVING_TO_BOX:
-      webTest("start", true);                                    // [เพิ่ม]
+      webTest("start", true, "");                                    // [เพิ่ม]
       webState("moving");                                        // [เพิ่ม]
       moveToBox(activeAlarmDay, activeAlarmSlot); 
       posDay = activeAlarmDay; posSlot = activeAlarmSlot;        // [เพิ่ม]
-      webState("ready"); webTest("move", true);                  // [เพิ่ม]
+      webState("ready"); webTest("move", true, "");                  // [เพิ่ม]
       if (moveOnly) {                                            // [เพิ่ม] goto: ไม่ดันยา ไม่เปิดเพลง
         moveOnly = false; doseMode = DM_NONE;
         webLog("ถึงช่องแล้ว " + slotName(activeAlarmDay, activeAlarmSlot));
@@ -625,9 +627,9 @@ void loop() {
       }
       webState("dispensing");                                    // [เพิ่ม]
       operateServoSmoothly();                     
-      webState("ready"); webTest("push", true);                  // [เพิ่ม]
+      webState("ready"); webTest("push", true, "");                  // [เพิ่ม]
       afterPush();                                               // [เพิ่ม] เซนเซอร์ + ภาพที่ 1
-      webTest("ring", true);                                     // [เพิ่ม]
+      webTest("ring", true, "");                                     // [เพิ่ม]
       currentState = ALARM_RINGING;               
       break;
 
@@ -638,7 +640,7 @@ void loop() {
       playAlarmSongOnce();
       if (doseActive && doseMode == DM_TEST && !pillSeen) {      // [เพิ่ม] ทดสอบแต่ไม่พบยา: จบการทดสอบ
         webTest("taken", false, "ข้าม เพราะไม่พบยาในถาด");
-        webTest("done", false);
+        webTest("done", false, "");
         endDose();
       }
       currentState = HOME;

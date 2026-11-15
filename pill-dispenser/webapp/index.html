@@ -350,7 +350,7 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
       <div class="grid-use">
         <div class="panel">
           <h2>เลือกวัน</h2>
-          <div class="muted" style="font-size:.88rem">แตะวันในปฏิทินเพื่อเลือก ได้สูงสุด 7 วัน (1 วัน = 1 ชั้น · เลขชั้นของแต่ละวันคงที่จนกว่าจะผ่านวันนั้นไป)</div>
+          <div class="muted" style="font-size:.88rem">แตะวันในปฏิทินเพื่อเลือก ได้สูงสุด 7 วัน (ชั้น 1–7 = วันอาทิตย์–เสาร์ ตามแกนของเครื่อง)</div>
           <div class="cal-head">
             <button class="btn ghost sm" id="prevM" aria-label="เดือนก่อน">‹</button>
             <strong id="monthLabel"></strong>
@@ -618,27 +618,22 @@ let user=null,sched={},fmap={},view=new Date(),active=null;   // fmap: วัน
 function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function todayISO(){return iso(new Date())}
 function sortedDays(){return Object.keys(sched).sort()}
-function floorOf(k){return fmap[k]||0}
-function dayOfFloor(f){for(const k in fmap)if(fmap[k]===f&&sched[k])return k;return null}
-function freeFloor(){const used=new Set(Object.keys(sched).map(k=>fmap[k]));for(let f=1;f<=FLOORS;f++)if(!used.has(f))return f;return 0}
-// ให้ทุกวันมีเลขชั้นของตัวเอง: วันที่มีอยู่แล้วคงเลขเดิม วันใหม่ได้ชั้นว่างที่เลขน้อยสุด
-function ensureFloors(){
-  for(const k of Object.keys(fmap))if(!sched[k])delete fmap[k];
-  const seen=new Set();
-  for(const k of sortedDays()){const f=fmap[k];if(!(f>=1&&f<=FLOORS)||seen.has(f))delete fmap[k];else seen.add(f)}
-  for(const k of sortedDays())if(!fmap[k])fmap[k]=freeFloor();
-}
+// ชั้นของเครื่อง = วันในสัปดาห์ (แกน X ของเครื่อง JaiYA): ชั้น 1 = อาทิตย์ … ชั้น 7 = เสาร์
+const TH_WD=["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+function wdOf(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d).getDay()}
+function floorOf(k){return wdOf(k)+1}
+function dayOfFloor(f){return sortedDays().find(k=>wdOf(k)===f-1)||null}
+function floorName(f){return "ชั้น "+f+" ("+TH_W[f-1]+")"}
+function ensureFloors(){}
 function fmt(k){const [y,m,d]=k.split("-").map(Number);return d+" "+TH_MS[m-1]}
 
 function enter(name){
   user=name;save("p7_session",name);
   sched=load("sched_"+name,{});
-  fmap=load("floors_"+name,null);
-  // ผู้ใช้เดิมที่ยังไม่มีการจำเลขชั้น: ใช้ลำดับเดิม (เรียงตามวันที่ รวมวันที่ผ่านไปแล้ว) เพื่อให้ตรงกับยาที่ใส่ไว้
-  if(!fmap){fmap={};sortedDays().forEach((k,i)=>{if(i<FLOORS)fmap[k]=i+1})}
-  // drop days in the past (ชั้นของวันนั้นว่างแล้ว ใส่ยาวันใหม่ได้ แต่ชั้นของวันอื่นไม่เลื่อน)
+  // drop days in the past
   const t=todayISO();for(const k of Object.keys(sched)) if(k<t) delete sched[k];
-  ensureFloors();save("floors_"+name,fmap);
+  // วันในสัปดาห์เดียวกันใช้ชั้นเดียวกัน: เก็บวันที่ใกล้ที่สุดไว้วันเดียว
+  const seenWd=new Set();for(const k of sortedDays()){if(seenWd.has(wdOf(k)))delete sched[k];else seenWd.add(wdOf(k))}
   active=sortedDays()[0]||null;
   view=new Date();
   $("auth").hidden=true;$("app").hidden=false;$("whoami").textContent=name;
@@ -682,10 +677,12 @@ function renderCal(){
 function toggleDay(k){
   if(sched[k]){
     if(active!==k){active=k;renderAll();return}
-    delete sched[k];delete fmap[k];active=sortedDays()[0]||null;persist();renderAll();toast("ยกเลิกวันที่ "+fmt(k));return;
+    delete sched[k];active=sortedDays()[0]||null;persist();renderAll();toast("ยกเลิกวันที่ "+fmt(k));return;
   }
   if(sortedDays().length>=MAXDAYS){toast("เลือกได้สูงสุด 7 วัน (เครื่องมี 7 ชั้น)");return}
-  sched[k]=DEFAULT_TIMES.map(t=>({on:false,time:t}));fmap[k]=freeFloor();active=k;persist();renderAll();toast("วันที่ "+fmt(k)+" ใช้ชั้น "+fmap[k]+" · ใส่ยาของวันนี้ในชั้น "+fmap[k])
+  const same=dayOfFloor(floorOf(k));
+  if(same){toast("วัน"+TH_WD[wdOf(k)]+"ใช้ชั้น "+floorOf(k)+" ซึ่งเลือกวันที่ "+fmt(same)+" ไว้แล้ว · ยกเลิกวันนั้นก่อน");return}
+  sched[k]=DEFAULT_TIMES.map(t=>({on:false,time:t}));active=k;persist();renderAll();toast("วันที่ "+fmt(k)+" (วัน"+TH_WD[wdOf(k)]+") · ใส่ยาในชั้น "+floorOf(k))
 }
 
 /* ---------- editor ---------- */
@@ -734,8 +731,8 @@ function renderRack(){
   const r=$("rack");r.innerHTML="";
   for(let f=FLOORS;f>=1;f--){
     const k=dayOfFloor(f),row=document.createElement("div");row.className="rack-row"+(k&&k===active?" cur":"");
-    const lab=document.createElement("div");lab.className="lab";lab.textContent="ชั้น "+f+(k?" · "+fmt(k):"");
-    if(k){lab.innerHTML="ชั้น "+f+"<br><span style='font-size:.7rem'>"+fmt(k)+"</span>"}
+    const lab=document.createElement("div");lab.className="lab";
+    lab.innerHTML="ชั้น "+f+" <b>"+TH_W[f-1]+"</b>"+(k?"<br><span style='font-size:.7rem'>"+fmt(k)+"</span>":"");
     row.appendChild(lab);
     for(let s=0;s<SLOTS;s++){
       const c=document.createElement("button");c.className="cell";c.id="cell-"+f+"-"+(s+1);
@@ -832,7 +829,7 @@ function renderStats(){
   $("statNext").textContent=next?fmt(next.slice(0,10))+" "+next.slice(11):"—";
 }
 const tf=$("tFloor"),ts=$("tSlot");
-for(let i=1;i<=7;i++)tf.add(new Option("ชั้น "+i,i));for(let i=1;i<=6;i++)ts.add(new Option("ช่อง "+i,i));
+for(let i=1;i<=7;i++)tf.add(new Option(floorName(i),i));for(let i=1;i<=6;i++)ts.add(new Option("ช่อง "+i,i));
 function addLog(m){const l=$("log"),d=document.createElement("div"),t=new Date();d.textContent="["+t.toLocaleTimeString("th-TH",{hour12:false})+"] "+m;l.prepend(d)}
 function command(cmd,f,s){
   const c=$("cell-"+f+"-"+s);if(c){c.classList.remove("spin");void c.offsetWidth;c.classList.add("spin")}
@@ -845,7 +842,7 @@ $("spinBtn").onclick=()=>{command("goto",+tf.value,+ts.value);toast("สั่�
 $("pushBtn").onclick=()=>{command("dispense",+tf.value,+ts.value);toast("สั่งจ่ายยาชั้น "+tf.value+" ช่อง "+ts.value+" แล้ว")};
 /* ---------- ทดสอบการทำงานครบวงจร ---------- */
 const xf=$("xFloor"),xs=$("xSlot");
-for(let i=1;i<=7;i++)xf.add(new Option("ชั้น "+i,i));for(let i=1;i<=6;i++)xs.add(new Option("ช่อง "+i,i));
+for(let i=1;i<=7;i++)xf.add(new Option(floorName(i),i));for(let i=1;i<=6;i++)xs.add(new Option("ช่อง "+i,i));
 const TEST_STEPS=[["move","หมุนถาดและเลื่อนตัวดันไปที่ช่อง"],["push","ดันยาออกจากช่อง"],["pill","เซนเซอร์ตรวจพบยาในถาด"],
   ["photo1","ถ่ายภาพที่ 1 (ตอนยาลงถาด)"],["ring","เปิดเพลงเตือน"],["taken","ตรวจพบว่าหยิบยาออกแล้ว"],["photo2","ถ่ายภาพที่ 2 (หลังหยิบยา)"]];
 let test=null;
@@ -982,7 +979,7 @@ let L=null;
 const cur={f:1,s:1},tower={a:0,t:0},carr={f:1,t:1},push={t0:-1e9};
 const CAR_HOME=2, CAR_PITCH=0.031;   // ในไฟล์ Onshape ตัวดันอยู่ระดับชั้น 2 · ระยะห่างชั้น 31 มม.
 const lvF=$("lvF"),lvS=$("lvS");
-for(let i=1;i<=7;i++)lvF.add(new Option("ชั้น "+i,i));for(let i=1;i<=6;i++)lvS.add(new Option("ช่อง "+i,i));
+for(let i=1;i<=7;i++)lvF.add(new Option(floorName(i),i));for(let i=1;i<=6;i++)lvS.add(new Option("ช่อง "+i,i));
 
 function initLive(){
   if(L)return;

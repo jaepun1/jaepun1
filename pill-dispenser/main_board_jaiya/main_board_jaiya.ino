@@ -1,16 +1,23 @@
 /*
-  เครื่องจ่ายยา JaiYA — โค้ดเดิมของเครื่อง + รับเวลา/คำสั่งจาก ESP32-S3 CAM ทาง Serial เดิม (RXD)
-  ส่วนที่เพิ่มมีป้าย [เพิ่ม] ส่วนอื่นเหมือนโค้ดเดิมทุกบรรทัด
+  เครื่องจ่ายยา JaiYA — โค้ดเดิมของเครื่อง + เชื่อมกับเว็บแอปผ่าน ESP32-S3 CAM
+  หลักการเดิมไม่เปลี่ยน: แกน X = วันในสัปดาห์ (SUN..SAT), แกน Y = ช่อง 1-6, Homing ทุกครั้ง, เซอร์โวดันยา, เพลงมาริโอ้
+  ส่วนที่เพิ่ม/แก้มีป้าย [เพิ่ม] หรือ [แก้]
 
-  การต่อสาย
-    ESP32-S3 CAM ขา TX ของกล้อง (ในโค้ดกล้อง BOARD_TX_PIN)  ->  บอร์ดนี้ RXD
-    GND                                                    ->  GND
-    ⚠️ ตอนอัปโหลดโค้ดลงบอร์ดนี้ ต้องถอดสายที่ RXD ออกก่อน แล้วค่อยเสียบกลับ
+  การต่อสาย (ใช้ Serial เดิม)
+    ESP32-S3 CAM ขา 21 (TX)  ->  บอร์ดนี้ RXD
+    ESP32-S3 CAM ขา 14 (RX)  <-  บอร์ดนี้ TXD    (ให้เว็บเห็นสถานะ / สั่งถ่ายภาพ)
+    GND                      ->  GND
+    เซนเซอร์ตรวจยา EC-BOT PU: Vcc -> 3V3, Out -> VP (GPIO36), Gnd -> GND  (ไม่มีให้ตั้ง USE_PILL_SENSOR 0)
+    ⚠️ ตอนอัปโหลดโค้ดลงบอร์ดนี้ ถอดสายที่ RXD และ TXD ออกก่อน แล้วค่อยเสียบกลับ
 
-  สิ่งที่รับได้ทาง Serial (จากกล้องหรือพิมพ์ใน Serial Monitor)
-    TEST <day 0-6> <slot 0-5>                                   แบบเดิม
-    {"cmd":"time","y":2026,"mo":11,"d":15,"h":8,"mi":0,"s":0}   ตั้งเวลา RTC (กล้องส่งจาก server ทุก 10 นาที / เว็บส่งตอนเชื่อมต่อ)
-    {"cmd":"test","floor":1-7,"slot":1-6}  หรือ "dispense"     = TEST <floor-1> <slot-1>
+  รับจากเว็บ (ผ่านกล้อง)                         ส่งกลับไปเว็บ
+    {"cmd":"time",...}      ตั้ง RTC                 {"type":"status","rtc":"08:00:05","floor":1,"slot":1,"pill":false,"ir":3500}
+    {"cmd":"schedule",...}  ตั้งเวลายา              {"floor":1,"slot":1,"state":"moving"|"ready"|"dispensing"}
+    {"cmd":"test",floor,slot}     ทดสอบครบวงจร       {"type":"taken","floor":1,"slot":1,"at":"2026-11-15T08:03:10"}
+    {"cmd":"dispense",floor,slot} ไปช่อง+ดันยา+เพลง  {"type":"snap",...} ให้กล้องถ่ายภาพ, {"type":"test",...}, {"type":"log",...}
+    {"cmd":"goto",floor,slot}     ไปช่องอย่างเดียว
+    {"cmd":"ir"} {"cmd":"cancel"}   และ TEST <day 0-6> <slot 0-5> แบบเดิม
+  ชั้น 1-7 ในเว็บ = วัน SUN..SAT (แกน X), ช่อง 1-6 = Slot 1-6 (แกน Y)
 */
 
 #include <Wire.h>
@@ -19,7 +26,7 @@
 #include <Adafruit_SH110X.h> 
 #include <EEPROM.h>
 #include <ESP32Servo.h> 
-#include <ArduinoJson.h>   // [เพิ่ม] อ่านข้อความ JSON จากกล้อง (ArduinoJson v7)
+#include <ArduinoJson.h>   // [เพิ่ม] ArduinoJson v7
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -150,31 +157,240 @@ void operateServoSmoothly() {
 }
 
 // ==========================================
-// [เพิ่ม] ข้อความ JSON จาก ESP32-S3 CAM (เวลาจาก server / คำสั่งจากเว็บ)
+// [เพิ่ม] เชื่อมกับเว็บ: เซนเซอร์ตรวจยา, ติดตามมื้อยา, ส่งข้อความ JSON
 // ==========================================
+#define USE_PILL_SENSOR 1          // ไม่ได้ต่อเซนเซอร์ตรวจยา ให้เป็น 0
+#define PILL_PIN 36                // VP
+const bool PILL_WHEN_LOW = true;   // ยาสะท้อนแสง = ค่าต่ำ
+const int  PILL_THRESHOLD = 2000;  // เส้นแบ่ง มียา/ไม่มียา (0-4095) ดูค่าจริงด้วยคำสั่ง ir
+const int  PILL_HYST = 200;
+const unsigned long PILL_DETECT_MS = 5000;           // รอยาตกลงถาดหลังดัน
+const unsigned long TAKEN_DEBOUNCE_MS = 1500;        // ถาดว่างนานเท่านี้ = หยิบแล้ว
+const unsigned long REMIND_MS = 5UL * 60 * 1000;     // เปิดเพลงซ้ำทุก 5 นาทีถ้ายายังอยู่
+const uint8_t       MAX_RINGS = 3;                   // เล่นเพลงสูงสุดกี่รอบ (รวมรอบแรก)
+const unsigned long MISSED_MS = 60UL * 60 * 1000;    // เกิน 1 ชม. = ไม่ได้รับยา
+const unsigned long TEST_TIMEOUT_MS = 2UL * 60 * 1000;
+
+enum DoseMode { DM_NONE, DM_SCHEDULED, DM_MANUAL, DM_TEST };
+DoseMode doseMode = DM_NONE;
+bool moveOnly = false;            // goto: ไปช่องอย่างเดียว
+bool doseActive = false;          // กำลังรอให้หยิบยา
+bool pillSeen = false;
+unsigned long doseStartMs = 0, lastRingMs = 0, clearSinceMs = 0, lastStatusMs = 0;
+uint8_t rings = 0;
+int posDay = 0, posSlot = 0;      // ตำแหน่งล่าสุด
+
+void sendJson(JsonDocument &d) { String out; serializeJson(d, out); Serial.println(out); }
+
+void webLog(const String &msg) {
+  JsonDocument d; d["type"] = "log"; d["msg"] = msg; sendJson(d);
+}
+
+void webState(const char *state) {
+  JsonDocument d; d["floor"] = activeAlarmDay + 1; d["slot"] = activeAlarmSlot + 1; d["state"] = state; sendJson(d);
+}
+
+void webSnap(const char *phase) {        // ให้กล้องถ่ายภาพ (มื้อจริง: dispensed/taken, ทดสอบ: test_...)
+  JsonDocument d;
+  d["type"] = "snap"; d["floor"] = activeAlarmDay + 1; d["slot"] = activeAlarmSlot + 1;
+  if (doseMode == DM_SCHEDULED) d["phase"] = phase;
+  else d["phase"] = strcmp(phase, "taken") == 0 ? "test_taken" : "test_dispensed";
+  sendJson(d);
+}
+
+void webTest(const char *step, bool ok, const String &msg = "") {   // รายงานผลทดสอบทีละขั้น
+  if (doseMode != DM_TEST) return;
+  JsonDocument d;
+  d["type"] = "test"; d["floor"] = activeAlarmDay + 1; d["slot"] = activeAlarmSlot + 1;
+  d["step"] = step; d["ok"] = ok;
+  if (msg.length()) d["msg"] = msg;
+  sendJson(d);
+}
+
+int pillRaw() {
+  long sum = 0;
+  for (int i = 0; i < 8; i++) sum += analogRead(PILL_PIN);
+  return sum / 8;
+}
+
+bool pillPresent() {
+#if USE_PILL_SENSOR
+  static bool state = false;
+  int v = pillRaw();
+  bool low = v < PILL_THRESHOLD - PILL_HYST, high = v > PILL_THRESHOLD + PILL_HYST;
+  if (PILL_WHEN_LOW ? low : high) state = true;
+  else if (PILL_WHEN_LOW ? high : low) state = false;
+  return state;
+#else
+  return false;
+#endif
+}
+
+String slotName(int day, int slot) { return daysOfWeek[day] + " Slot " + String(slot + 1); }
+
+void endDose() { doseActive = false; doseMode = DM_NONE; }
+
+// เริ่มงาน: ไปช่อง (+ดันยา +เพลง)
+void startJob(int day, int slot, DoseMode mode, bool onlyMove) {
+  if (currentState == ALARM_RINGING || currentState == MOVING_TO_BOX) { webLog("เครื่องกำลังทำงานอยู่"); return; }
+  if (doseActive) {                                   // ปิดงานเก่าที่ยังรอหยิบยา
+    if (doseMode == DM_TEST) { webTest("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); webTest("done", false); }
+    endDose();
+  }
+  activeAlarmDay = day;
+  activeAlarmSlot = slot;
+  doseMode = mode;
+  moveOnly = onlyMove;
+  currentState = MOVING_TO_BOX;
+}
+
+// หลังดันยา: รอเซนเซอร์เจอยา แล้วสั่งถ่ายภาพที่ 1
+void afterPush() {
+  pillSeen = false;
+  clearSinceMs = 0;
+  rings = 0;
+  doseStartMs = millis();
+  doseActive = true;
+#if USE_PILL_SENSOR
+  while (millis() - doseStartMs < PILL_DETECT_MS) {
+    if (pillPresent()) { pillSeen = true; break; }
+    delay(20);
+  }
+  if (pillSeen) {
+    webSnap("dispensed");
+    webLog("ยาลงถาดแล้ว " + slotName(activeAlarmDay, activeAlarmSlot));
+    webTest("pill", true, "ค่าเซนเซอร์ " + String(pillRaw()));
+  } else {
+    webLog("เซนเซอร์ไม่พบยาในถาด " + slotName(activeAlarmDay, activeAlarmSlot));
+    webTest("pill", false, "ไม่พบยาภายใน 5 วินาที (ค่าเซนเซอร์ " + String(pillRaw()) + ")");
+  }
+#else
+  webSnap("dispensed");                               // ไม่มีเซนเซอร์: ถ่ายภาพหลังดันเลย
+  webTest("pill", false, "ไม่ได้เปิดใช้เซนเซอร์ตรวจยา");
+#endif
+}
+
+// ติดตามมื้อยา: หยิบแล้ว / เตือนซ้ำ / ไม่ได้รับยา
+void updateDose() {
+  if (!doseActive) return;
+  bool present = pillPresent();
+
+  if (!pillSeen) {
+    if (present) { pillSeen = true; webSnap("dispensed"); }        // ยามาถึงช้า
+  } else if (!present) {
+    if (!clearSinceMs) clearSinceMs = millis();
+    if (millis() - clearSinceMs >= TAKEN_DEBOUNCE_MS) {
+      if (doseMode == DM_SCHEDULED) {
+        DateTime n = rtc.now();
+        char at[20];
+        sprintf(at, "%04d-%02d-%02dT%02d:%02d:%02d", n.year(), n.month(), n.day(), n.hour(), n.minute(), n.second());
+        JsonDocument d;
+        d["type"] = "taken"; d["floor"] = activeAlarmDay + 1; d["slot"] = activeAlarmSlot + 1; d["at"] = at;
+        sendJson(d);
+      } else {
+        webLog("หยิบยาออกจากถาดแล้ว " + slotName(activeAlarmDay, activeAlarmSlot));
+      }
+      webSnap("taken");                                            // ภาพที่ 2
+      webTest("taken", true);
+      webTest("done", true);
+      endDose();
+      return;
+    }
+  } else {
+    clearSinceMs = 0;
+  }
+
+  if (doseMode == DM_SCHEDULED && pillSeen && present && rings < MAX_RINGS &&
+      millis() - lastRingMs >= REMIND_MS && currentState == HOME) {
+    webLog("ยังไม่ได้หยิบยา เตือนครั้งที่ " + String(rings + 1));
+    currentState = ALARM_RINGING;                                  // เปิดเพลงซ้ำ
+  }
+
+  if (doseMode == DM_TEST && millis() - doseStartMs >= TEST_TIMEOUT_MS) {
+    webTest("taken", false, "ไม่ได้หยิบยาภายใน 2 นาที");
+    webTest("done", false);
+    endDose();
+    return;
+  }
+  if (millis() - doseStartMs >= MISSED_MS) {
+    webLog("ไม่ได้รับยา " + slotName(activeAlarmDay, activeAlarmSlot));
+    endDose();
+  }
+}
+
+void sendStatus(DateTime now) {
+  char t[9];
+  sprintf(t, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  JsonDocument d;
+  d["type"] = "status"; d["rtc"] = t;
+  d["floor"] = posDay + 1; d["slot"] = posSlot + 1;
+#if USE_PILL_SENSOR
+  d["pill"] = pillPresent(); d["ir"] = pillRaw();
+#endif
+  sendJson(d);
+}
+
+// ตารางเวลาจากเว็บ -> alarms[วันในสัปดาห์][ช่อง] (ใช้หลักการเดิม: เตือนซ้ำทุกสัปดาห์)
+void applySchedule(JsonObject data) {
+  AlarmTimer na[7][6];
+  int days = 0, count = 0;
+  for (JsonObject fo : data["floors"].as<JsonArray>()) {
+    int y, m, dd;
+    if (sscanf(fo["date"] | "", "%d-%d-%d", &y, &m, &dd) != 3) continue;
+    int wd = DateTime(y, m, dd).dayOfTheWeek();
+    days++;
+    for (JsonObject so : fo["slots"].as<JsonArray>()) {
+      int si = (so["slot"] | 0) - 1;
+      int h, mi;
+      if (si < 0 || si > 5) continue;
+      if ((so["on"] | false) && sscanf(so["time"] | "", "%d:%d", &h, &mi) == 2) {
+        na[wd][si].hour = h; na[wd][si].minute = mi; na[wd][si].active = true;
+        count++;
+      }
+    }
+  }
+  memcpy(alarms, na, sizeof(alarms));
+  EEPROM.put(EEPROM_ADDR, alarms);
+  EEPROM.commit();
+  webLog("รับตารางเวลา " + String(days) + " วัน " + String(count) + " มื้อแล้ว");
+}
+
+// ข้อความ JSON จากกล้อง/เว็บ
 void handleJsonCommand(String line) {
   JsonDocument doc;
   if (deserializeJson(doc, line)) return;
   const char *cmd = doc["cmd"] | "";
+  int f = doc["floor"] | 0, sl = doc["slot"] | 0;          // เว็บนับ 1-7 / 1-6
+  bool okPos = f >= 1 && f <= 7 && sl >= 1 && sl <= 6;
 
   if (!strcmp(cmd, "time")) {
     DateTime t(doc["y"] | 2026, doc["mo"] | 1, doc["d"] | 1, doc["h"] | 0, doc["mi"] | 0, doc["s"] | 0);
     if (t.year() < 2024) return;
     long diff = (long)t.unixtime() - (long)rtc.now().unixtime();
-    if (diff > 1 || diff < -1) {            // ปรับเฉพาะเมื่อคลาดเกิน 1 วินาที
+    if (diff > 1 || diff < -1) {                              // ปรับเฉพาะเมื่อคลาดเกิน 1 วินาที
       rtc.adjust(t);
-      Serial.println("RTC set from server");
+      webLog(strcmp(doc["src"] | "", "ntp") == 0 ? "ตั้งเวลาจาก server แล้ว" : "ตั้งเวลาตามเว็บแล้ว");
     }
   }
-  else if (!strcmp(cmd, "test") || !strcmp(cmd, "dispense")) {
-    int f = doc["floor"] | 0, sl = doc["slot"] | 0;   // เว็บนับ 1-7 / 1-6
-    if (f >= 1 && f <= 7 && sl >= 1 && sl <= 6) {
-      activeAlarmDay = f - 1;
-      activeAlarmSlot = sl - 1;
-      currentState = MOVING_TO_BOX;
+  else if (!strcmp(cmd, "schedule")) applySchedule(doc["data"].as<JsonObject>());
+  else if (!strcmp(cmd, "test"))     { if (okPos) startJob(f - 1, sl - 1, DM_TEST, false); }
+  else if (!strcmp(cmd, "dispense")) { if (okPos) startJob(f - 1, sl - 1, DM_MANUAL, false); }
+  else if (!strcmp(cmd, "goto"))     { if (okPos) startJob(f - 1, sl - 1, DM_NONE, true); }
+  else if (!strcmp(cmd, "ir")) {
+#if USE_PILL_SENSOR
+    webLog("ค่าเซนเซอร์ตรวจยา = " + String(pillRaw()) + (pillPresent() ? " (มียา)" : " (ไม่มียา)"));
+#else
+    webLog("ไม่ได้เปิดใช้เซนเซอร์ตรวจยา");
+#endif
+  }
+  else if (!strcmp(cmd, "cancel")) {
+    if (doseActive && doseMode != DM_SCHEDULED) {
+      if (doseMode == DM_TEST) { webTest("taken", false, "ยกเลิกการทดสอบ"); webTest("done", false); }
+      endDose();
+      webLog("ยกเลิกแล้ว");
     }
   }
-  // ข้อความอื่นจากกล้อง (เช่น สถานะ Wi-Fi, ตารางเวลา) ข้ามไป
+  // ข้อความอื่นจากกล้อง (เช่น สถานะ Wi-Fi) ข้ามไป
 }
 
 // ==========================================
@@ -199,9 +415,7 @@ void checkSerialCommands() {
           Serial.print("Testing Target -> Day: "); Serial.print(daysOfWeek[dayTest]);
           Serial.print(" Slot: "); Serial.println(slotTest + 1);
           
-          activeAlarmDay = dayTest;
-          activeAlarmSlot = slotTest;
-          currentState = MOVING_TO_BOX; 
+          startJob(dayTest, slotTest, DM_MANUAL, false);   // [แก้] เดิม: ตั้ง activeAlarmDay/Slot แล้วไป MOVING_TO_BOX
         } else {
           Serial.println("Error: Day must be 0-6, Slot must be 0-5.");
         }
@@ -283,9 +497,9 @@ void moveToBox(int dayIndex, int slotIndex) {
 }
 
 void setup() {
-  Serial.setRxBufferSize(2048);   // [เพิ่ม] ข้อความจากกล้องบางอันยาว
+  Serial.setRxBufferSize(2048);   // [เพิ่ม] ข้อความตารางเวลาจากเว็บยาว
   Serial.begin(115200);
-  Serial.setTimeout(200);         // [เพิ่ม] อ่านทีละบรรทัดไม่ค้างนาน
+  Serial.setTimeout(200);         // [เพิ่ม]
   Wire.begin(21, 22);
 
   pinMode(SW_PIN, INPUT_PULLUP);
@@ -299,6 +513,8 @@ void setup() {
   
   pinMode(SENSOR_X_PIN, INPUT); 
   pinMode(SENSOR_Y_PIN, INPUT);
+  pinMode(PILL_PIN, INPUT);                       // [เพิ่ม]
+  analogSetPinAttenuation(PILL_PIN, ADC_11db);    // [เพิ่ม] อ่านได้ 0-3.3V
 
   ESP32PWM::allocateTimer(0);
   pushServo.setPeriodHertz(50); 
@@ -345,6 +561,11 @@ void loop() {
   if (currentState != ALARM_RINGING && currentState != MOVING_TO_BOX) {
     checkSerialCommands();
     handleJoystick();
+    updateDose();                                 // [เพิ่ม]
+  }
+  if (millis() - lastStatusMs >= 2000) {          // [เพิ่ม] สถานะให้เว็บทุก 2 วินาที
+    lastStatusMs = millis();
+    sendStatus(now);
   }
 
   display.clearDisplay();
@@ -391,15 +612,35 @@ void loop() {
       break;
       
     case MOVING_TO_BOX:
+      webTest("start", true);                                    // [เพิ่ม]
+      webState("moving");                                        // [เพิ่ม]
       moveToBox(activeAlarmDay, activeAlarmSlot); 
+      posDay = activeAlarmDay; posSlot = activeAlarmSlot;        // [เพิ่ม]
+      webState("ready"); webTest("move", true);                  // [เพิ่ม]
+      if (moveOnly) {                                            // [เพิ่ม] goto: ไม่ดันยา ไม่เปิดเพลง
+        moveOnly = false; doseMode = DM_NONE;
+        webLog("ถึงช่องแล้ว " + slotName(activeAlarmDay, activeAlarmSlot));
+        currentState = HOME;
+        break;
+      }
+      webState("dispensing");                                    // [เพิ่ม]
       operateServoSmoothly();                     
+      webState("ready"); webTest("push", true);                  // [เพิ่ม]
+      afterPush();                                               // [เพิ่ม] เซนเซอร์ + ภาพที่ 1
+      webTest("ring", true);                                     // [เพิ่ม]
       currentState = ALARM_RINGING;               
       break;
 
     case ALARM_RINGING:
       drawAlarmRinging();
       display.display(); 
+      rings++; lastRingMs = millis();                            // [เพิ่ม]
       playAlarmSongOnce();
+      if (doseActive && doseMode == DM_TEST && !pillSeen) {      // [เพิ่ม] ทดสอบแต่ไม่พบยา: จบการทดสอบ
+        webTest("taken", false, "ข้าม เพราะไม่พบยาในถาด");
+        webTest("done", false);
+        endDose();
+      }
       currentState = HOME;
       buttonPressed = false;
       delay(300); 
@@ -421,6 +662,7 @@ void playAlarmSongOnce() {
     
     unsigned long startT = millis();
     while (millis() - startT < alarm_durations[i]) {
+      if (doseActive && pillSeen && !pillPresent()) { noTone(BUZ_PIN); return; }   // [เพิ่ม] หยิบยาแล้ว หยุดเพลง
       if (digitalRead(SW_PIN) == LOW) { 
         noTone(BUZ_PIN);
         while (digitalRead(SW_PIN) == LOW) { delay(10); } 
@@ -518,9 +760,7 @@ void checkAlarms(DateTime now) {
   int d = now.dayOfTheWeek();
   for (int i = 0; i < 6; i++) {
     if (alarms[d][i].active && alarms[d][i].hour == now.hour() && alarms[d][i].minute == now.minute() && now.second() == 0) {
-      activeAlarmDay = d;    
-      activeAlarmSlot = i;   
-      currentState = MOVING_TO_BOX; 
+      startJob(d, i, DM_SCHEDULED, false);   // [แก้] เดิม: ตั้ง activeAlarmDay/Slot แล้วไป MOVING_TO_BOX
     }
   }
 }

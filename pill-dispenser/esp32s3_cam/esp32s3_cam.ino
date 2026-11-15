@@ -33,6 +33,11 @@
 #include <time.h>
 
 // ==========================================
+// ตัวช่วยหาปัญหา
+// ==========================================
+#define USE_CAMERA 1   // ตั้งเป็น 0 เพื่อปิดกล้องชั่วคราว (ใช้ทดสอบว่าบอร์ดค้างเพราะกล้องหรือไม่)
+
+// ==========================================
 // ตั้งค่า Wi-Fi
 // ==========================================
 const char *WIFI_SSID = "YOUR_WIFI";
@@ -399,14 +404,35 @@ void startWifi() {
   if (MDNS.begin(HOSTNAME)) MDNS.addService("ws", "tcp", 81);
 }
 
+void bootStep(const char *msg) {   // พิมพ์ทันที (flush) เผื่อบอร์ดค้างในขั้นถัดไป
+  Serial.println(msg);
+  Serial.flush();
+}
+
 void setup() {
   Serial.begin(115200);
+  delay(1500);                    // รอให้ Serial Monitor พร้อม
+  bootStep("\n===== กล้องเครื่องจ่ายยา เริ่มทำงาน =====");
+  Serial.printf("PSRAM: %s (%u bytes)  Flash: %u bytes\n", psramFound() ? "พบ" : "ไม่พบ",
+                (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFlashChipSize());
+  Serial.flush();
+
+  bootStep("[1/4] เปิด UART ไปบอร์ดหลัก (RX14, TX21)");
   Board.setRxBufferSize(4096);
   Board.begin(115200, SERIAL_8N1, BOARD_RX_PIN, BOARD_TX_PIN);
 
+#if USE_CAMERA
+  bootStep("[2/4] เปิดกล้อง...");
   camOk = initCamera();
+  bootStep(camOk ? "[2/4] เปิดกล้องสำเร็จ" : "[2/4] เปิดกล้องไม่สำเร็จ (ทำงานต่อโดยไม่มีกล้อง)");
+#else
+  bootStep("[2/4] ข้ามกล้อง (USE_CAMERA = 0)");
+#endif
+
+  bootStep("[3/4] ต่อ Wi-Fi...");
   startWifi();
 
+  bootStep("[4/4] เปิด WebSocket");
   ws.begin();
   ws.onEvent(onWs);
   ws.enableHeartbeat(15000, 3000, 2);   // ตัดหน้าเว็บที่ปิดไปแล้ว

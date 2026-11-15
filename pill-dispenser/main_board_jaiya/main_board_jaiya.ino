@@ -1,20 +1,16 @@
 /*
-  เครื่องจ่ายยา JaiYA — โค้ดเดิมของเครื่อง + รับค่าจาก ESP32-S3 CAM ทาง Serial2
-  ส่วนที่เพิ่มมีเครื่องหมาย [เพิ่ม] ส่วนอื่นเหมือนโค้ดเดิมทุกบรรทัด
+  เครื่องจ่ายยา JaiYA — โค้ดเดิมของเครื่อง + รับเวลา/คำสั่งจาก ESP32-S3 CAM ทาง Serial เดิม (RXD)
+  ส่วนที่เพิ่มมีป้าย [เพิ่ม] ส่วนอื่นเหมือนโค้ดเดิมทุกบรรทัด
 
-  การต่อสาย (เพิ่ม)
-    ESP32-S3 CAM ขา 21 (TX)  ->  บอร์ดนี้ D32 (RX2)
-    ESP32-S3 CAM ขา 14 (RX)  <-  บอร์ดนี้ D33 (TX2)   (ไม่ต่อก็ได้ ถ้าไม่ต้องการให้เว็บเห็นสถานะ)
-    GND                      ->  GND
-    ห้ามต่ออะไรที่ TXD / RXD
+  การต่อสาย
+    ESP32-S3 CAM ขา TX ของกล้อง (ในโค้ดกล้อง BOARD_TX_PIN)  ->  บอร์ดนี้ RXD
+    GND                                                    ->  GND
+    ⚠️ ตอนอัปโหลดโค้ดลงบอร์ดนี้ ต้องถอดสายที่ RXD ออกก่อน แล้วค่อยเสียบกลับ
 
-  สิ่งที่รับจากกล้อง
-    {"cmd":"time","y":2026,"mo":11,"d":15,"h":8,"mi":0,"s":0,"src":"ntp"}  ตั้งเวลา RTC ตาม server (ทุก 10 นาที)
-    {"cmd":"time",...}  จากเว็บตอนเชื่อมต่อ
-    {"cmd":"test","floor":1-7,"slot":1-6}      = TEST <floor-1> <slot-1>  (ไปช่อง + ดันยา + เพลง)
-    {"cmd":"dispense","floor":1-7,"slot":1-6}  เหมือน test
-    {"cmd":"goto","floor":1-7,"slot":1-6}      ไปช่องอย่างเดียว ไม่ดันยา
-    TEST <day 0-6> <slot 0-5>                  แบบเดียวกับพิมพ์ใน Serial Monitor
+  สิ่งที่รับได้ทาง Serial (จากกล้องหรือพิมพ์ใน Serial Monitor)
+    TEST <day 0-6> <slot 0-5>                                   แบบเดิม
+    {"cmd":"time","y":2026,"mo":11,"d":15,"h":8,"mi":0,"s":0}   ตั้งเวลา RTC (กล้องส่งจาก server ทุก 10 นาที / เว็บส่งตอนเชื่อมต่อ)
+    {"cmd":"test","floor":1-7,"slot":1-6}  หรือ "dispense"     = TEST <floor-1> <slot-1>
 */
 
 #include <Wire.h>
@@ -23,7 +19,7 @@
 #include <Adafruit_SH110X.h> 
 #include <EEPROM.h>
 #include <ESP32Servo.h> 
-#include <ArduinoJson.h>   // [เพิ่ม] อ่านข้อความจากกล้อง (ArduinoJson v7)
+#include <ArduinoJson.h>   // [เพิ่ม] อ่านข้อความ JSON จากกล้อง (ArduinoJson v7)
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -48,14 +44,6 @@ Servo pushServo;
 
 #define SENSOR_X_PIN 16 
 #define SENSOR_Y_PIN 17 
-
-// [เพิ่ม] Serial2 ต่อกับ ESP32-S3 CAM (ใช้ขาที่โค้ดเดิมไม่ได้ใช้)
-#define CAM_RX_PIN 32   // รับจากกล้องขา 21
-#define CAM_TX_PIN 33   // ส่งไปกล้องขา 14
-HardwareSerial CamSerial(2);
-String camBuf;
-bool moveOnly = false;           // คำสั่ง goto: ไปช่องอย่างเดียว ไม่ดันยา
-unsigned long lastStatusMs = 0;
 
 // --- ตั้งค่าความเร็วในการเคลื่อนที่ ---
 #define HOMING_SPEED 70       
@@ -162,12 +150,41 @@ void operateServoSmoothly() {
 }
 
 // ==========================================
+// [เพิ่ม] ข้อความ JSON จาก ESP32-S3 CAM (เวลาจาก server / คำสั่งจากเว็บ)
+// ==========================================
+void handleJsonCommand(String line) {
+  JsonDocument doc;
+  if (deserializeJson(doc, line)) return;
+  const char *cmd = doc["cmd"] | "";
+
+  if (!strcmp(cmd, "time")) {
+    DateTime t(doc["y"] | 2026, doc["mo"] | 1, doc["d"] | 1, doc["h"] | 0, doc["mi"] | 0, doc["s"] | 0);
+    if (t.year() < 2024) return;
+    long diff = (long)t.unixtime() - (long)rtc.now().unixtime();
+    if (diff > 1 || diff < -1) {            // ปรับเฉพาะเมื่อคลาดเกิน 1 วินาที
+      rtc.adjust(t);
+      Serial.println("RTC set from server");
+    }
+  }
+  else if (!strcmp(cmd, "test") || !strcmp(cmd, "dispense")) {
+    int f = doc["floor"] | 0, sl = doc["slot"] | 0;   // เว็บนับ 1-7 / 1-6
+    if (f >= 1 && f <= 7 && sl >= 1 && sl <= 6) {
+      activeAlarmDay = f - 1;
+      activeAlarmSlot = sl - 1;
+      currentState = MOVING_TO_BOX;
+    }
+  }
+  // ข้อความอื่นจากกล้อง (เช่น สถานะ Wi-Fi, ตารางเวลา) ข้ามไป
+}
+
+// ==========================================
 // ฟังก์ชันตรวจสอบคำสั่งจาก Serial
 // ==========================================
 void checkSerialCommands() {
   if (Serial.available() > 0) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
+    if (cmd.startsWith("{")) { handleJsonCommand(cmd); return; }   // [เพิ่ม] ข้อความจากกล้อง/เว็บ
     cmd.toUpperCase();
     
     if (cmd.startsWith("TEST")) {
@@ -265,108 +282,10 @@ void moveToBox(int dayIndex, int slotIndex) {
   }
 }
 
-// ==========================================
-// [เพิ่ม] รับคำสั่ง/เวลาจาก ESP32-S3 CAM ทาง Serial2
-// ==========================================
-void camLog(const String &msg) {            // ส่งข้อความกลับไปแสดงในเว็บ + Serial Monitor
-  JsonDocument d;
-  d["type"] = "log";
-  d["msg"] = msg;
-  String out;
-  serializeJson(d, out);
-  CamSerial.println(out);
-  Serial.println(msg);
-}
-
-void camState(const char *state) {          // ให้โมเดล 3D ในเว็บขยับตาม
-  if (activeAlarmDay < 0) return;
-  JsonDocument d;
-  d["floor"] = activeAlarmDay + 1;
-  d["slot"] = activeAlarmSlot + 1;
-  d["state"] = state;
-  String out;
-  serializeJson(d, out);
-  CamSerial.println(out);
-}
-
-void camStatus(DateTime now) {              // เวลาเครื่อง ส่งไปเว็บทุก 2 วินาที
-  char t[9];
-  sprintf(t, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
-  JsonDocument d;
-  d["type"] = "status";
-  d["rtc"] = t;
-  String out;
-  serializeJson(d, out);
-  CamSerial.println(out);
-}
-
-void startBox(int day, int slot, bool onlyMove) {
-  if (currentState == ALARM_RINGING || currentState == MOVING_TO_BOX) {
-    camLog("เครื่องกำลังทำงานอยู่ ลองใหม่อีกครั้ง");
-    return;
-  }
-  activeAlarmDay = day;
-  activeAlarmSlot = slot;
-  moveOnly = onlyMove;
-  currentState = MOVING_TO_BOX;
-}
-
-void handleCamLine(String line) {
-  line.trim();
-  if (!line.length()) return;
-
-  if (line[0] != '{') {                     // ข้อความธรรมดา เช่น TEST 0 2
-    String u = line;
-    u.toUpperCase();
-    if (u.startsWith("TEST")) {
-      int d = -1, sl = -1;
-      sscanf(u.c_str(), "TEST %d %d", &d, &sl);
-      if (d >= 0 && d <= 6 && sl >= 0 && sl <= 5) startBox(d, sl, false);
-      else camLog("รูปแบบ: TEST <day 0-6> <slot 0-5>");
-    }
-    return;
-  }
-
-  JsonDocument doc;
-  if (deserializeJson(doc, line)) return;
-  const char *cmd = doc["cmd"] | "";
-
-  if (!strcmp(cmd, "time")) {               // เวลาจาก server (ผ่านกล้อง) หรือจากเว็บ
-    DateTime t(doc["y"] | 2026, doc["mo"] | 1, doc["d"] | 1, doc["h"] | 0, doc["mi"] | 0, doc["s"] | 0);
-    if (t.year() < 2024) return;
-    long diff = (long)t.unixtime() - (long)rtc.now().unixtime();
-    if (diff > 1 || diff < -1) {            // ปรับเฉพาะเมื่อคลาดเกิน 1 วินาที
-      rtc.adjust(t);
-      bool ntp = !strcmp(doc["src"] | "", "ntp");
-      char t2[9];
-      sprintf(t2, "%02d:%02d:%02d", t.hour(), t.minute(), t.second());
-      camLog(String(ntp ? "ตั้งเวลาจาก server แล้ว " : "ตั้งเวลาตามเว็บแล้ว ") + t2);
-    }
-    return;
-  }
-
-  int f = doc["floor"] | 0, sl = doc["slot"] | 0;   // เว็บนับ 1-7 / 1-6
-  bool okPos = f >= 1 && f <= 7 && sl >= 1 && sl <= 6;
-  if (!strcmp(cmd, "test") || !strcmp(cmd, "dispense")) {
-    if (okPos) startBox(f - 1, sl - 1, false);
-  } else if (!strcmp(cmd, "goto")) {
-    if (okPos) startBox(f - 1, sl - 1, true);
-  }
-  // คำสั่งอื่น (เช่น schedule) โค้ดเดิมยังไม่รองรับ ข้ามไป
-}
-
-void checkCamSerial() {
-  while (CamSerial.available()) {
-    char c = CamSerial.read();
-    if (c == '\n') { handleCamLine(camBuf); camBuf = ""; }
-    else if (c != '\r' && camBuf.length() < 2000) camBuf += c;
-  }
-}
-
 void setup() {
+  Serial.setRxBufferSize(2048);   // [เพิ่ม] ข้อความจากกล้องบางอันยาว
   Serial.begin(115200);
-  CamSerial.setRxBufferSize(2048);                                  // [เพิ่ม]
-  CamSerial.begin(115200, SERIAL_8N1, CAM_RX_PIN, CAM_TX_PIN);      // [เพิ่ม]
+  Serial.setTimeout(200);         // [เพิ่ม] อ่านทีละบรรทัดไม่ค้างนาน
   Wire.begin(21, 22);
 
   pinMode(SW_PIN, INPUT_PULLUP);
@@ -422,12 +341,6 @@ void setup() {
 
 void loop() {
   DateTime now = rtc.now();
-
-  checkCamSerial();                                   // [เพิ่ม] เวลา/คำสั่งจากกล้อง
-  if (millis() - lastStatusMs >= 2000) {              // [เพิ่ม]
-    lastStatusMs = millis();
-    camStatus(now);
-  }
   
   if (currentState != ALARM_RINGING && currentState != MOVING_TO_BOX) {
     checkSerialCommands();
@@ -478,18 +391,8 @@ void loop() {
       break;
       
     case MOVING_TO_BOX:
-      camState("moving");                                         // [เพิ่ม]
       moveToBox(activeAlarmDay, activeAlarmSlot); 
-      camState("ready");                                          // [เพิ่ม]
-      if (moveOnly) {                                             // [เพิ่ม] goto: ไม่ดันยา ไม่เปิดเพลง
-        moveOnly = false;
-        camLog("ถึงช่องแล้ว " + daysOfWeek[activeAlarmDay] + " Slot " + String(activeAlarmSlot + 1));
-        currentState = HOME;
-        break;
-      }
-      camState("dispensing");                                     // [เพิ่ม]
       operateServoSmoothly();                     
-      camLog("ดันยาแล้ว " + daysOfWeek[activeAlarmDay] + " Slot " + String(activeAlarmSlot + 1));  // [เพิ่ม]
       currentState = ALARM_RINGING;               
       break;
 

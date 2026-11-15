@@ -7,6 +7,8 @@
   - {"type":"snap",...} จากบอร์ดหลัก และ {"cmd":"capture","floor":3,"slot":4,"phase":"test"} จากเว็บ -> ถ่ายภาพแล้วส่งเป็น
       {"type":"photo","floor":3,"slot":4,"phase":"dispensed","at":12345,"img":"data:image/jpeg;base64,..."}
       ถ้าถ่ายไม่สำเร็จ ส่ง {"type":"photo_error","floor":3,"slot":4,"phase":"test","msg":"..."}
+  - พิมพ์คำสั่งใน Serial Monitor ของกล้อง (สาย USB) ได้ เช่น test 3 4, goto 3 4, ir, photo, help
+      กล้องจะส่งต่อให้บอร์ดหลักทาง UART และแสดงผลตอบกลับจากบอร์ดหลัก
   - ส่งสถานะเครือข่ายให้บอร์ดหลักทุก 3 วินาที (แสดง IP บนจอ OLED)
   - ดึงเวลาประเทศไทยจากอินเทอร์เน็ต (NTP) ส่งให้บอร์ดหลักตอนเปิดเครื่องและทุก 10 นาที
       {"cmd":"time","y":2026,"mo":11,"d":13,"h":8,"mi":0,"s":0,"src":"ntp"}
@@ -88,6 +90,8 @@ uint32_t lastNetMs = 0;
 void sendLog(const String &msg, int client = -1);
 void sendPhotoError(int floor, int slot, const char *phase, const String &msg);
 void handleBoardLine(String &line);
+void handleCommandJson(String line, int client);
+bool sendTimeToBoard();
 
 // ==========================================
 // กล้อง
@@ -240,19 +244,97 @@ void onWs(uint8_t num, WStype_t type, uint8_t *payload, size_t len) {
 
     case WStype_TEXT: {
       String line((const char *)payload, len);
-      line.replace("\n", " ");   // UART ใช้ขึ้นบรรทัดใหม่เป็นตัวแบ่งข้อความ
-      JsonDocument doc;
-      if (deserializeJson(doc, line)) { sendLog("ได้ข้อความที่ไม่ใช่ JSON", num); break; }
-      const char *cmd = doc["cmd"] | "";
-      if (!strcmp(cmd, "capture")) {             // กล้องจัดการเอง
-        snapAndSend(doc["floor"] | 0, doc["slot"] | 0, doc["phase"] | "manual");
-      } else {
-        Board.println(line);                     // ส่งต่อให้บอร์ดหลัก
-      }
+      handleCommandJson(line, num);
       break;
     }
     default:
       break;
+  }
+}
+
+// คำสั่ง JSON จากเว็บ (client >= 0) หรือจาก Serial Monitor ของกล้อง (client = -1)
+void handleCommandJson(String line, int client) {
+  line.replace("\n", " ");   // UART ใช้ขึ้นบรรทัดใหม่เป็นตัวแบ่งข้อความ
+  line.replace("\r", " ");
+  JsonDocument doc;
+  if (deserializeJson(doc, line)) {
+    if (client >= 0) sendLog("ได้ข้อความที่ไม่ใช่ JSON", client);
+    else Serial.println("JSON ไม่ถูกต้อง พิมพ์ help เพื่อดูคำสั่ง");
+    return;
+  }
+  const char *cmd = doc["cmd"] | "";
+  if (!strcmp(cmd, "capture")) {             // กล้องจัดการเอง
+    snapAndSend(doc["floor"] | 0, doc["slot"] | 0, doc["phase"] | "manual");
+  } else {
+    Board.println(line);                     // ส่งต่อให้บอร์ดหลักทาง UART
+    if (client < 0) Serial.println("→ บอร์ดหลัก " + line);
+  }
+}
+
+// ==========================================
+// Serial Monitor ของกล้อง (สาย USB): พิมพ์คำสั่งแล้วส่งต่อให้บอร์ดหลัก
+//   test 3 4 · goto 3 4 · dispense 3 4 · photo · ir · stop · cancel · time · wifi · status on/off · help
+//   หรือพิมพ์ JSON ตรง ๆ เช่น {"cmd":"goto","floor":3,"slot":4}
+// ==========================================
+bool showStatus = false;     // แสดงข้อความ status ของบอร์ดหลักทุก 2 วินาทีหรือไม่
+
+void printHelp() {
+  Serial.println("คำสั่ง (พิมพ์แล้วกด Enter):");
+  Serial.println("  test ชั้น ช่อง      ทดสอบครบวงจร เช่น test 3 4");
+  Serial.println("  goto ชั้น ช่อง      หมุนไปช่อง");
+  Serial.println("  dispense ชั้น ช่อง  หมุนและดันยา");
+  Serial.println("  photo              ถ่ายภาพทดสอบ (ดูภาพได้ในเว็บ)");
+  Serial.println("  ir                 ค่าเซนเซอร์ตรวจยา");
+  Serial.println("  stop / cancel      หยุดเพลง / ยกเลิกการทดสอบ");
+  Serial.println("  time               ส่งเวลาจากอินเทอร์เน็ตให้บอร์ดหลักทันที");
+  Serial.println("  wifi               สถานะ Wi-Fi และ IP");
+  Serial.println("  status on / off    แสดง / ซ่อนสถานะของบอร์ดหลักทุก 2 วินาที");
+  Serial.println("  {...}              ส่งคำสั่ง JSON ตรง ๆ");
+}
+
+void handleConsoleLine(String line) {
+  line.trim();
+  if (!line.length()) return;
+  if (line[0] == '{') { handleCommandJson(line, -1); return; }
+
+  char w[16] = "";
+  int f = 0, s = 0;
+  sscanf(line.c_str(), "%15s %d %d", w, &f, &s);
+  String c = String(w);
+  c.toLowerCase();
+  bool pos = f >= 1 && f <= 7 && s >= 1 && s <= 6;
+
+  if (c == "test" || c == "goto" || c == "dispense") {
+    if (!pos) { Serial.println("ต้องระบุชั้น 1-7 และช่อง 1-6 เช่น " + c + " 3 4"); return; }
+    handleCommandJson("{\"cmd\":\"" + c + "\",\"floor\":" + String(f) + ",\"slot\":" + String(s) + "}", -1);
+  } else if (c == "ir" || c == "stop" || c == "cancel") {
+    handleCommandJson("{\"cmd\":\"" + c + "\"}", -1);
+  } else if (c == "photo" || c == "capture") {
+    snapAndSend(0, 0, "test");
+  } else if (c == "time") {
+    if (sendTimeToBoard()) Serial.println("ส่งเวลาให้บอร์ดหลักแล้ว");
+    else Serial.println("ยังไม่ได้เวลาจากอินเทอร์เน็ต (ตรวจว่าต่อ Wi-Fi บ้านที่มีเน็ต)");
+  } else if (c == "wifi") {
+    if (WiFi.status() == WL_CONNECTED) Serial.println("ต่อ Wi-Fi แล้ว IP: " + WiFi.localIP().toString() + "  เว็บใช้ ws://" + WiFi.localIP().toString() + ":81");
+    else if (WiFi.getMode() & WIFI_AP) Serial.println("เปิดฮอตสปอต " + String(AP_SSID) + " IP: " + WiFi.softAPIP().toString());
+    else Serial.println("ยังไม่ได้ต่อ Wi-Fi");
+    Serial.println("เว็บที่เชื่อมอยู่: " + String(ws.connectedClients()));
+  } else if (c == "status") {
+    showStatus = (f == 0 && line.indexOf("off") < 0);
+    Serial.println(showStatus ? "แสดงสถานะทุก 2 วินาที" : "ซ่อนสถานะ");
+  } else if (c == "help" || c == "?") {
+    printHelp();
+  } else {
+    Serial.println("ไม่รู้จักคำสั่ง \"" + c + "\" พิมพ์ help เพื่อดูคำสั่งทั้งหมด");
+  }
+}
+
+String rxConsole;
+void pollConsole() {
+  while (Serial.available()) {
+    char ch = Serial.read();
+    if (ch == '\n') { handleConsoleLine(rxConsole); rxConsole = ""; }
+    else if (ch != '\r' && rxConsole.length() < 2000) rxConsole += ch;
   }
 }
 
@@ -269,6 +351,8 @@ void handleBoardLine(String &line) {
     return;
   }
   ws.broadcastTXT(line);   // status / taken / log / moving / ready / dispensing
+  // แสดงใน Serial Monitor ของกล้องด้วย (status ทุก 2 วินาทีจะซ่อนไว้ ยกเว้นพิมพ์ status on)
+  if (strcmp(type, "status") || showStatus) Serial.println("← บอร์ดหลัก " + line);
 }
 
 void pollBoard() {
@@ -327,11 +411,13 @@ void setup() {
   ws.onEvent(onWs);
   ws.enableHeartbeat(15000, 3000, 2);   // ตัดหน้าเว็บที่ปิดไปแล้ว
   Serial.println("WebSocket พร้อมที่พอร์ต 81");
+  Serial.println("พิมพ์ help ใน Serial Monitor เพื่อดูคำสั่งทดสอบ");
 }
 
 void loop() {
   ws.loop();
   pollBoard();
+  pollConsole();
 
   if (millis() - lastNetMs > 3000) {
     lastNetMs = millis();

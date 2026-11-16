@@ -7,7 +7,10 @@
     ESP32-S3 CAM ขา 21 (TX)  ->  บอร์ดนี้ RXD
     ESP32-S3 CAM ขา 14 (RX)  <-  บอร์ดนี้ TXD    (ให้เว็บเห็นสถานะ / สั่งถ่ายภาพ)
     GND                      ->  GND
-    เซนเซอร์ตรวจยา EC-BOT PU: Vcc -> 3V3, Out -> VP (GPIO36), Gnd -> GND  (ไม่มีให้ตั้ง USE_PILL_SENSOR 0)
+    เซนเซอร์ตรวจยา Sharp GP2Y0A41SK0F (วัดระยะ 4-30 ซม.):
+      สายแดง -> 5V, สายดำ -> GND, สายเหลือง -> VP (GPIO36)   (ไม่มีให้ตั้ง USE_PILL_SENSOR 0)
+      ติดให้ห่างจุดที่กล่องยาตก 5-10 ซม. (ใกล้กว่า 4 ซม. วัดไม่ได้)
+      จำค่าจากเว็บ: แท็บ SETTING ปุ่ม "จำค่าถาดว่าง" และ "จำค่าตอนมียา" (หรือ {"cmd":"calibrate","state":"empty"|"pill"|"reset"})
     ⚠️ ตอนอัปโหลดโค้ดลงบอร์ดนี้ ถอดสายที่ RXD และ TXD ออกก่อน แล้วค่อยเสียบกลับ
 
   รับจากเว็บ (ผ่านกล้อง)                         ส่งกลับไปเว็บ
@@ -16,7 +19,7 @@
     {"cmd":"test",floor,slot}     ทดสอบครบวงจร       {"type":"taken","floor":1,"slot":1,"at":"2026-11-15T08:03:10"}
     {"cmd":"dispense",floor,slot} ไปช่อง+ดันยา+เพลง  {"type":"snap",...} ให้กล้องถ่ายภาพ, {"type":"test",...}, {"type":"log",...}
     {"cmd":"goto",floor,slot}     ไปช่องอย่างเดียว
-    {"cmd":"ir"} {"cmd":"cancel"}   และ TEST <day 0-6> <slot 0-5> แบบเดิม
+    {"cmd":"ir"} {"cmd":"cancel"} {"cmd":"calibrate","state":"empty"|"pill"}   และ TEST <day 0-6> <slot 0-5> แบบเดิม
   ชั้น 1-7 ในเว็บ = วัน SUN..SAT (แกน X), ช่อง 1-6 = Slot 1-6 (แกน Y)
 */
 
@@ -165,9 +168,15 @@ void operateServoSmoothly() {
 // ==========================================
 #define USE_PILL_SENSOR 1          // ไม่ได้ต่อเซนเซอร์ตรวจยา ให้เป็น 0
 #define PILL_PIN 36                // VP
-const bool PILL_WHEN_LOW = true;   // ยาสะท้อนแสง = ค่าต่ำ
-const int  PILL_THRESHOLD = 2000;  // เส้นแบ่ง มียา/ไม่มียา (0-4095) ดูค่าจริงด้วยคำสั่ง ir
-const int  PILL_HYST = 200;
+// ค่าเริ่มต้น (ใช้เมื่อยังไม่ได้จำค่า): Sharp GP2Y0A41SK0F วัตถุยิ่งใกล้ ค่ายิ่งสูง
+const bool PILL_WHEN_LOW = false;
+const int  PILL_THRESHOLD = 1500;  // เส้นแบ่ง มียา/ไม่มียา (0-4095)
+const int  PILL_HYST = 150;
+// ค่าที่จำจากเครื่องจริง (บันทึกใน EEPROM ตำแหน่ง 200 ไม่ทับตารางเวลา)
+#define CAL_ADDR  200
+#define CAL_MAGIC 0x5C
+struct PillCal { uint8_t magic; uint8_t hasEmpty; uint8_t hasPill; uint16_t emptyVal; uint16_t pillVal; };
+PillCal pillCal = {0, 0, 0, 0, 0};
 const unsigned long PILL_DETECT_MS = 5000;           // รอยาตกลงถาดหลังดัน
 const unsigned long TAKEN_DEBOUNCE_MS = 1500;        // ถาดว่างนานเท่านี้ = หยิบแล้ว
 const unsigned long REMIND_MS = 5UL * 60 * 1000;     // เปิดเพลงซ้ำทุก 5 นาทีถ้ายายังอยู่
@@ -209,23 +218,61 @@ void webTest(const char *step, bool ok, const String &msg) {   // รายง�
   sendJson(d);
 }
 
-int pillRaw() {
+int pillRaw() {                    // เซนเซอร์ Sharp ค่ากระเพื่อม: เฉลี่ย 16 ครั้ง
   long sum = 0;
-  for (int i = 0; i < 8; i++) sum += analogRead(PILL_PIN);
-  return sum / 8;
+  for (int i = 0; i < 16; i++) { sum += analogRead(PILL_PIN); delayMicroseconds(300); }
+  return sum / 16;
+}
+
+// เส้นแบ่งที่ใช้อยู่: จากค่าที่จำไว้ ถ้ามี ไม่อย่างนั้นใช้ค่าเริ่มต้น
+void pillRule(int &thr, int &hyst, bool &whenLow) {
+  int e = pillCal.emptyVal, p = pillCal.pillVal;
+  if (pillCal.hasEmpty && pillCal.hasPill && abs(e - p) >= 100) {
+    thr = (e + p) / 2; whenLow = p < e; hyst = abs(e - p) / 6; if (hyst < 30) hyst = 30;
+  } else if (pillCal.hasEmpty) {               // จำแค่ถาดว่าง: มียา = ค่าสูงกว่าถาดว่างชัดเจน
+    thr = e + 400; whenLow = false; hyst = 100;
+  } else {
+    thr = PILL_THRESHOLD; whenLow = PILL_WHEN_LOW; hyst = PILL_HYST;
+  }
 }
 
 bool pillPresent() {
 #if USE_PILL_SENSOR
   static bool state = false;
+  int thr, hyst; bool whenLow;
+  pillRule(thr, hyst, whenLow);
   int v = pillRaw();
-  bool low = v < PILL_THRESHOLD - PILL_HYST, high = v > PILL_THRESHOLD + PILL_HYST;
-  if (PILL_WHEN_LOW ? low : high) state = true;
-  else if (PILL_WHEN_LOW ? high : low) state = false;
+  bool low = v < thr - hyst, high = v > thr + hyst;
+  if (whenLow ? low : high) state = true;
+  else if (whenLow ? high : low) state = false;
   return state;
 #else
   return false;
 #endif
+}
+
+// จำค่าเซนเซอร์: state = "empty" (ถาดว่าง) / "pill" (มีกล่องยา) / "reset"
+void calibratePill(const char *st) {
+  if (!strcmp(st, "reset")) {
+    pillCal = {CAL_MAGIC, 0, 0, 0, 0};
+  } else {
+    long sum = 0;
+    for (int i = 0; i < 4; i++) { sum += pillRaw(); delay(50); }
+    int v = sum / 4;
+    pillCal.magic = CAL_MAGIC;
+    if (!strcmp(st, "pill")) { pillCal.pillVal = v; pillCal.hasPill = 1; }
+    else                     { pillCal.emptyVal = v; pillCal.hasEmpty = 1; }
+  }
+  EEPROM.put(CAL_ADDR, pillCal);
+  EEPROM.commit();
+  int thr, hyst; bool whenLow;
+  pillRule(thr, hyst, whenLow);
+  String msg = "จำค่าเซนเซอร์: ถาดว่าง=" + (pillCal.hasEmpty ? String(pillCal.emptyVal) : String("-")) +
+               " มียา=" + (pillCal.hasPill ? String(pillCal.pillVal) : String("-")) +
+               " เส้นแบ่ง=" + String(thr) + (whenLow ? " (มียา=ค่าต่ำ)" : " (มียา=ค่าสูง)");
+  if (pillCal.hasEmpty && pillCal.hasPill && abs((int)pillCal.emptyVal - (int)pillCal.pillVal) < 100)
+    msg += " ⚠️ สองค่าต่างกันน้อยเกินไป ตรวจตำแหน่งเซนเซอร์ (ห่างจุดที่กล่องตก 5-10 ซม.)";
+  webLog(msg);
 }
 
 String slotName(int day, int slot) { return daysOfWeek[day] + " Slot " + String(slot + 1); }
@@ -380,11 +427,15 @@ void handleJsonCommand(String line) {
   else if (!strcmp(cmd, "goto"))     { if (okPos) startJob(f - 1, sl - 1, DM_NONE, true); }
   else if (!strcmp(cmd, "ir")) {
 #if USE_PILL_SENSOR
-    webLog("ค่าเซนเซอร์ตรวจยา = " + String(pillRaw()) + (pillPresent() ? " (มียา)" : " (ไม่มียา)"));
+    int thr, hyst; bool whenLow;
+    pillRule(thr, hyst, whenLow);
+    webLog("ค่าเซนเซอร์ตรวจยา = " + String(pillRaw()) + (pillPresent() ? " (มียา)" : " (ไม่มียา)") +
+           " · เส้นแบ่ง " + String(thr));
 #else
     webLog("ไม่ได้เปิดใช้เซนเซอร์ตรวจยา");
 #endif
   }
+  else if (!strcmp(cmd, "calibrate")) calibratePill(doc["state"] | "empty");
   else if (!strcmp(cmd, "cancel")) {
     if (doseActive && doseMode != DM_SCHEDULED) {
       if (doseMode == DM_TEST) { webTest("taken", false, "ยกเลิกการทดสอบ"); webTest("done", false, ""); }
@@ -545,6 +596,8 @@ void setup() {
     EEPROM.put(EEPROM_ADDR, alarms);
     EEPROM.commit();
   }
+  EEPROM.get(CAL_ADDR, pillCal);                                  // [เพิ่ม] ค่าเซนเซอร์ที่จำไว้
+  if (pillCal.magic != CAL_MAGIC) pillCal = {CAL_MAGIC, 0, 0, 0, 0};
 
   if (!rtc.begin()) {
     Serial.println("Couldn't find RTC");

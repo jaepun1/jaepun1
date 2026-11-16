@@ -203,6 +203,7 @@ function handle(o) {
       }
       break;
     case "capture": photo(f, s, o.phase || "manual"); break;
+    case "calibrate": log(`จำค่าเซนเซอร์ (${o.state || "empty"}) = ${pill ? 2400 : 300} (จำลอง)`); break;
     case "ir": log(`ค่าเซนเซอร์ตรวจยา = ${pill ? 640 : 3480} (${pill ? "มียา" : "ไม่มียา"})`); break;
     case "stop": console.log("■ หยุดเพลง"); break;
     default: log(`ไม่รู้จักคำสั่ง ${o.cmd}`);

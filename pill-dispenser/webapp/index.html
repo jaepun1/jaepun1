@@ -476,6 +476,12 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
           </div>
           <ol class="checks" id="testSteps"></ol>
           <div class="live-ir">ค่าเซนเซอร์ตรวจยาตอนนี้: <b id="irLive">— (ยังไม่ได้เชื่อมต่อ)</b></div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn ghost sm" id="calEmpty">จำค่าถาดว่าง</button>
+            <button class="btn ghost sm" id="calPill">จำค่าตอนมียา</button>
+            <button class="btn ghost sm" id="calReset">ล้างค่าที่จำ</button>
+          </div>
+          <div class="muted" style="font-size:.78rem;margin-top:4px">ให้ถาดว่างแล้วกด “จำค่าถาดว่าง” จากนั้นวางกล่องยาตรงจุดที่ตกแล้วกด “จำค่าตอนมียา” เครื่องจะจำไว้แม้ปิดเครื่อง</div>
           <div class="photos test-shots" id="testShots"></div>
         </div>
 
@@ -502,7 +508,7 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
             <input id="cmdInput" aria-label="พิมพ์คำสั่ง" placeholder="พิมพ์คำสั่ง เช่น test 3 4" spellcheck="false">
             <button class="btn" type="submit">ส่ง</button>
           </form>
-          <div class="cmd-help"><code>test ชั้น ช่อง</code> ทดสอบครบวงจร · <code>goto ชั้น ช่อง</code> หมุนไป · <code>dispense ชั้น ช่อง</code> หมุนและดันยา · <code>photo</code> ถ่ายภาพทดสอบ · <code>ir</code> ค่าเซนเซอร์ · <code>stop</code> หยุดเพลง · <code>cancel</code> ยกเลิกการทดสอบ · <code>time</code> ตั้งเวลาเครื่อง · <code>sync</code> ส่งตารางเวลา · <code>help</code></div>
+          <div class="cmd-help"><code>test ชั้น ช่อง</code> ทดสอบครบวงจร · <code>goto ชั้น ช่อง</code> หมุนไป · <code>dispense ชั้น ช่อง</code> หมุนและดันยา · <code>photo</code> ถ่ายภาพทดสอบ · <code>ir</code> ค่าเซนเซอร์ · <code>cal empty</code> / <code>cal pill</code> จำค่าเซนเซอร์ · <code>stop</code> หยุดเพลง · <code>cancel</code> ยกเลิกการทดสอบ · <code>time</code> ตั้งเวลาเครื่อง · <code>sync</code> ส่งตารางเวลา · <code>help</code></div>
           <div class="log" id="log"></div>
         </div>
 
@@ -912,6 +918,8 @@ function testPhoto(phase,src,err){
   test.shots[phase]={src,at:Date.now()};setStep(k,"ok");renderTestShots();
 }
 $("testBtn").onclick=()=>startTest(+xf.value,+xs.value);
+function calib(state){if(sendCmd({cmd:"calibrate",state}))addLog("ส่งคำสั่งจำค่าเซนเซอร์ ("+({empty:"ถาดว่าง",pill:"มียา",reset:"ล้างค่า"}[state])+")");else toast("เชื่อมต่อเครื่องก่อน")}
+$("calEmpty").onclick=()=>calib("empty");$("calPill").onclick=()=>calib("pill");$("calReset").onclick=()=>calib("reset");
 $("testCancel").onclick=()=>{sendCmd({cmd:"cancel"});addLog("ส่งคำสั่งยกเลิกการทดสอบ")};
 
 /* ---------- ทดสอบกล้อง ---------- */
@@ -935,7 +943,7 @@ $("camTestBtn").onclick=camTest;
 
 /* ---------- ช่องพิมพ์คำสั่ง ---------- */
 const CMD_HELP=["test ชั้น ช่อง — ทดสอบครบวงจร (เช่น test 3 4)","goto ชั้น ช่อง — หมุนไปช่อง","dispense ชั้น ช่อง — หมุนและดันยา",
-  "photo — ถ่ายภาพทดสอบ","ir — ดูค่าเซนเซอร์ตรวจยา","stop — หยุดเพลง","cancel — ยกเลิกการทดสอบ","time — ตั้งเวลาเครื่องตามเว็บ",
+  "photo — ถ่ายภาพทดสอบ","ir — ดูค่าเซนเซอร์ตรวจยา","cal empty / cal pill / cal reset — จำค่าเซนเซอร์ (ถาดว่าง / มียา / ล้าง)","stop — หยุดเพลง","cancel — ยกเลิกการทดสอบ","time — ตั้งเวลาเครื่องตามเว็บ",
   "sync — ส่งตารางเวลาไปที่เครื่อง","{…} — ส่งคำสั่ง JSON ตรง ๆ"];
 const cmdHist=[];let cmdPos=0;
 function runCommand(line){
@@ -952,6 +960,7 @@ function runCommand(line){
     case "dispense":case "จ่าย":if(pos())command("dispense",n[0],n[1]);break;
     case "photo":case "capture":case "ถ่าย":case "ถ่ายภาพ":camTest();break;
     case "ir":case "sensor":need({cmd:"ir"});break;
+    case "cal":case "calibrate":{const st={empty:"empty",pill:"pill",reset:"reset"}[a[0]];if(st)need({cmd:"calibrate",state:st});else addLog("พิมพ์ cal empty / cal pill / cal reset");break}
     case "stop":need({cmd:"stop"});break;
     case "cancel":need({cmd:"cancel"});break;
     case "time":{const t=new Date();need({cmd:"time",y:t.getFullYear(),mo:t.getMonth()+1,d:t.getDate(),h:t.getHours(),mi:t.getMinutes(),s:t.getSeconds()});break}

@@ -246,15 +246,23 @@ void pillRule(int &thr, int &hyst, bool &whenLow) {
   }
 }
 
+const uint8_t PILL_CONFIRM = 3;    // ต้องเห็นค่าฝั่งใหม่ติดกันกี่ครั้งถึงจะเปลี่ยนสถานะ (กันค่ากระโดด)
+
 bool pillPresent() {
 #if USE_PILL_SENSOR
   static bool state = false;
+  static uint8_t streak = 0;
   int thr, hyst; bool whenLow;
   pillRule(thr, hyst, whenLow);
   int v = pillRaw();
   bool low = v < thr - hyst, high = v > thr + hyst;
-  if (whenLow ? low : high) state = true;
-  else if (whenLow ? high : low) state = false;
+  bool seesPill = whenLow ? low : high;
+  bool seesEmpty = whenLow ? high : low;
+  if ((!state && seesPill) || (state && seesEmpty)) {
+    if (++streak >= PILL_CONFIRM) { state = !state; streak = 0; }
+  } else {
+    streak = 0;                       // ค่ายังอยู่ฝั่งเดิม หรืออยู่ช่วงกลาง
+  }
   return state;
 #else
   return false;

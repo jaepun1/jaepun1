@@ -218,10 +218,20 @@ void webTest(const char *step, bool ok, const String &msg) {   // รายง�
   sendJson(d);
 }
 
-int pillRaw() {                    // เซนเซอร์ Sharp ค่ากระเพื่อม: เฉลี่ย 16 ครั้ง
-  long sum = 0;
-  for (int i = 0; i < 16; i++) { sum += analogRead(PILL_PIN); delayMicroseconds(300); }
-  return sum / 16;
+// เซนเซอร์ Sharp ค่ากระเพื่อมเป็นจังหวะ (ทุก ~16 มิลลิวินาที): อ่าน 15 ครั้งในช่วง ~25 มิลลิวินาที แล้วใช้ค่ากลาง (median)
+// ตัดค่าที่กระโดดทิ้ง จากนั้นเฉลี่ยกับค่าก่อนหน้าอีกชั้นให้นิ่งขึ้น
+int pillRaw() {
+  int v[15];
+  for (int i = 0; i < 15; i++) { v[i] = analogRead(PILL_PIN); delayMicroseconds(1700); }
+  for (int i = 1; i < 15; i++) {             // เรียงลำดับ (insertion sort)
+    int x = v[i], j = i - 1;
+    while (j >= 0 && v[j] > x) { v[j + 1] = v[j]; j--; }
+    v[j + 1] = x;
+  }
+  static int smooth = -1;
+  int med = v[7];
+  smooth = (smooth < 0) ? med : (smooth * 2 + med) / 3;
+  return smooth;
 }
 
 // เส้นแบ่งที่ใช้อยู่: จากค่าที่จำไว้ ถ้ามี ไม่อย่างนั้นใช้ค่าเริ่มต้น

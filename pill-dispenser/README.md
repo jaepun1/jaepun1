@@ -209,6 +209,7 @@ python -m http.server 8000
 | รับยาแล้ว | `{"type":"taken","floor":3,"slot":4,"at":"2026-11-11T08:03:10"}` |
 | ภาพ | `{"type":"photo","floor":3,"slot":4,"phase":"dispensed","img":"data:image/jpeg;base64,..."}` |
 | ผลทดสอบทีละขั้น | `{"type":"test","floor":3,"slot":4,"step":"pill","ok":true,"msg":"ค่าเซนเซอร์ 640"}` (step: `start` `move` `push` `pill` `ring` `taken` `done`) |
+| มื้อยาตามตารางทีละขั้น (แสดงที่หน้า START) | `{"type":"dose","floor":1,"slot":2,"step":"taken","ok":true}` (step เหมือน `test`) |
 | ภาพทดสอบ | `{"type":"photo","phase":"test"}` (ปุ่มทดสอบกล้อง) หรือ `"test_dispensed"` / `"test_taken"` (ระหว่างทดสอบ) |
 | กล้องถ่ายไม่สำเร็จ | `{"type":"photo_error","floor":3,"slot":4,"phase":"test","msg":"..."}` |
 | บันทึก | `{"type":"log","msg":"..."}` |

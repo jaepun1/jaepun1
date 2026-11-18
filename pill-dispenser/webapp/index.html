@@ -160,6 +160,10 @@ main{padding-block:22px 48px}
 
 /* rack */
 .rack-wrap{margin-top:18px}
+.dose-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px;align-items:start;margin-top:4px}
+@media (max-width:760px){.dose-grid{grid-template-columns:minmax(0,1fr)}}
+.dose-grid .photos{margin-top:14px}
+#dlgSteps{margin-top:0}
 .rack{display:grid;gap:5px;margin-top:12px}
 .rack-row{display:grid;grid-template-columns:62px repeat(6,minmax(0,1fr));gap:5px;align-items:center}
 .rack-row .lab{font-family:var(--f-mono);font-size:.78rem;color:var(--ink-2)}
@@ -367,6 +371,14 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
         </div>
       </div>
 
+      <div class="panel rack-wrap" id="dosePanel" hidden>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <h2>มื้อยาล่าสุด</h2><span class="pill" id="dosePill"></span>
+        </div>
+        <div class="muted" id="doseSub" style="font-size:.88rem"></div>
+        <div class="dose-grid"><ol class="checks" id="doseSteps"></ol><div class="photos" id="doseShots"></div></div>
+      </div>
+
       <div class="panel rack-wrap">
         <h2>ภาพรวมเครื่อง</h2>
         <div class="muted" style="font-size:.88rem">แตะช่องเพื่อดูสถานะการรับยาและภาพจากกล้อง · แถวขอบน้ำเงิน = วันที่กำลังแก้ไข</div>
@@ -541,6 +553,7 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
     <span class="status-big" id="dlgStatus"></span>
     <div class="photos" id="dlgPhoto"></div>
     <ol class="timeline" id="dlgTimeline"></ol>
+    <ol class="checks" id="dlgSteps" hidden></ol>
     <div class="row" style="margin-top:0">
       <button class="btn" id="dlgCapture">ถ่ายภาพจากกล้อง</button>
       <button class="btn ghost" id="dlgTaken"></button>
@@ -799,6 +812,8 @@ function renderSlot(){
     {lbl:"รับยา",sub:sl.taken?"ตรวจพบว่ารับยาแล้ว":st==="missed"?"ไม่ได้รับยา":"รอเซนเซอร์ตรวจจับการรับยา",
       when:sl.taken?hm(new Date(sl.taken)):"",cls:sl.taken?"done":st==="missed"?"bad":""}
   ];
+  const dd=doses[photoKey(k,s)];$("dlgSteps").hidden=!dd;$("dlgTimeline").hidden=!!dd;
+  if(dd)stepsInto($("dlgSteps"),dd.st);
   $("dlgTimeline").innerHTML=steps.map((x,i)=>'<li class="'+x.cls+'"><span class="dot">'+(x.cls==="done"?"✓":x.cls==="bad"?"!":i+1)+'</span><div><div class="lbl">'+x.lbl+'</div><div class="sub">'+x.sub+'</div></div><span class="when">'+x.when+'</span></li>').join("");
   const tb=$("dlgTaken");tb.hidden=!sl.on;tb.textContent=sl.taken?"ยกเลิกสถานะรับยา":"บันทึกว่ารับยาแล้ว";
 }
@@ -859,12 +874,7 @@ function setStep(k,state,msg){if(!test)return;test.st[k]={state,msg:msg||""};
 function renderTest(){
   const ol=$("testSteps");ol.innerHTML="";const pill=$("testPill");
   if(!test){pill.className="pill";pill.textContent="ยังไม่ได้ทดสอบ";$("testCancel").hidden=true;return}
-  TEST_STEPS.forEach(([k,lbl],i)=>{const st=test.st[k]||{state:"wait",msg:""};
-    const li=document.createElement("li");li.className=st.state;
-    const ic=document.createElement("span");ic.className="ic";ic.textContent=st.state==="ok"?"✓":st.state==="fail"?"✕":st.state==="skip"?"–":String(i+1);
-    const tx=document.createElement("div");tx.textContent=lbl;
-    if(st.msg){const sm=document.createElement("small");sm.textContent=st.msg;tx.appendChild(sm)}
-    li.append(ic,tx);ol.appendChild(li)});
+  stepsInto(ol,test.st);
   const vals=TEST_STEPS.map(([k])=>(test.st[k]||{}).state||"wait");
   const busy=vals.some(v=>v==="run")||!test.done;
   const bad=vals.filter(v=>v==="fail").length;
@@ -873,15 +883,82 @@ function renderTest(){
   else if(bad){pill.className="pill bad";pill.textContent="ไม่ผ่าน "+bad+" ขั้น"}
   else{pill.className="pill ok";pill.textContent="ผ่านทุกขั้น"}
 }
-function renderTestShots(){
-  const box=$("testShots");box.innerHTML="";if(!test)return;
-  [["test_dispensed","ตอนจ่ายยา"],["test_taken","หลังหยิบยา"]].forEach(([k,cap])=>{
-    const p=test.shots[k],fig=document.createElement("figure"),fc=document.createElement("figcaption");fc.textContent=cap;
+// รายการ 7 ขั้น (ใช้ทั้งกล่องทดสอบ หน้า START และหน้าต่างรายละเอียดช่อง)
+function stepsInto(ol,stMap){
+  ol.innerHTML="";
+  TEST_STEPS.forEach(([k,lbl],i)=>{const st=stMap[k]||{state:"wait",msg:""};
+    const li=document.createElement("li");li.className=st.state;
+    const ic=document.createElement("span");ic.className="ic";ic.textContent=st.state==="ok"?"✓":st.state==="fail"?"✕":st.state==="skip"?"–":String(i+1);
+    const tx=document.createElement("div");tx.textContent=lbl;
+    if(st.msg){const sm=document.createElement("small");sm.textContent=st.msg;tx.appendChild(sm)}
+    li.append(ic,tx);ol.appendChild(li)});
+}
+function shotsInto(box,list){
+  box.innerHTML="";
+  list.forEach(([cap,p])=>{
+    const fig=document.createElement("figure"),fc=document.createElement("figcaption");fc.textContent=cap;
     if(p){const t=document.createElement("span");t.textContent=hm(new Date(p.at));fc.appendChild(t)}
     const div=document.createElement("div");
     if(p){div.className="photo has";const img=document.createElement("img");img.alt=cap;img.src=p.src;div.appendChild(img)}
     else{div.className="photo";div.innerHTML='<b>ยังไม่มีภาพ</b>'}
     fig.append(fc,div);box.appendChild(fig)});
+}
+
+/* ---------- มื้อยาตามตาราง: ความคืบหน้าทีละขั้นบนหน้า START (ข้อความ type "dose" จากบอร์ดหลัก) ---------- */
+const doses={};let liveDose=null;
+function doseKey(f,s){const k=dayOfFloor(f);return k?photoKey(k,s-1):"f"+f+"s"+s}
+function doseSet(d,k,state,msg){
+  d.st[k]={state,msg:msg||""};clearTimeout(d.tmo[k]);
+  if(state==="run"&&(k==="photo1"||k==="photo2"))
+    d.tmo[k]=setTimeout(()=>{if(d.st[k].state==="run"){d.st[k]={state:"fail",msg:"ไม่ได้รับภาพจากกล้องภายใน 20 วินาที"};renderDose();renderSlot()}},20000);
+}
+function doseWaitPhoto(d,k){const st=d.st[k];if(st&&(st.state==="ok"||st.state==="fail"))return;doseSet(d,k,"run","รอภาพจากกล้อง…")}
+function onDoseMsg(m){
+  const key=doseKey(m.floor,m.slot);let d=doses[key];
+  if(m.step==="start"||!d){d=doses[key]={f:m.floor,s:m.slot,st:{},tmo:{},done:false,ok:null,at:Date.now()};
+    if(m.step==="start"){toast("ถึงเวลาจ่ายยา ชั้น "+m.floor+" ช่อง "+m.slot);addLog("เริ่มจ่ายยาตามตาราง ชั้น "+m.floor+" ช่อง "+m.slot)}}
+  liveDose=key;
+  const ok=!!m.ok,msg=m.msg||"";
+  switch(m.step){
+    case "start":doseSet(d,"move","run");break;
+    case "move":doseSet(d,"move",ok?"ok":"fail",msg);doseSet(d,"push","run");break;
+    case "push":doseSet(d,"push",ok?"ok":"fail",msg);doseSet(d,"pill","run","รอยาตกลงถาด…");break;
+    case "pill":if(d.st.pill&&d.st.pill.state==="ok"&&!ok)break;   // ภาพมาถึงก่อนแล้ว
+      doseSet(d,"pill",ok?"ok":"fail",ok?msg:msg+" · ถ้ายาลงถาดทีหลัง ระบบจะอัปเดตเอง");if(ok)doseWaitPhoto(d,"photo1");break;
+    case "ring":doseSet(d,"ring","ok",msg);
+      if(d.st.pill&&d.st.pill.state==="ok"&&(!d.st.taken||d.st.taken.state==="run"))doseSet(d,"taken","run","รอผู้ป่วยหยิบยาออกจากถาด");break;
+    case "taken":doseSet(d,"taken",ok?"ok":"fail",msg);if(ok)doseWaitPhoto(d,"photo2");break;
+    case "done":d.done=true;d.ok=ok;
+      for(const [k] of TEST_STEPS){const st=d.st[k];if(!st||st.state==="wait")d.st[k]={state:"skip",msg:""}}break;
+  }
+  renderDose();renderSlot();
+}
+function dosePhoto(f,s,phase,err){
+  const d=doses[doseKey(f,s)];if(!d)return;
+  const k=phase==="taken"?"photo2":"photo1";
+  if(err)doseSet(d,k,"fail",err);
+  else{doseSet(d,k,"ok");
+    if(k==="photo1"&&(!d.st.pill||d.st.pill.state!=="ok")){doseSet(d,"pill","ok","ยาลงถาดช้ากว่าปกติ");
+      if(d.st.ring&&d.st.ring.state==="ok"&&!d.st.taken)doseSet(d,"taken","run","รอผู้ป่วยหยิบยาออกจากถาด")}}
+  renderDose();renderSlot();
+}
+function renderDose(){
+  const panel=$("dosePanel"),d=liveDose&&doses[liveDose];
+  panel.hidden=!d;if(!d)return;
+  const k=dayOfFloor(d.f),sl=k&&sched[k]&&sched[k][d.s-1];
+  $("doseSub").textContent=floorName(d.f)+" · ช่อง "+d.s+(sl&&sl.on?" · กำหนด "+sl.time+" น.":"")+(k?" · "+fmt(k):"")+" · เริ่มจ่าย "+hm(new Date(d.at))+" น.";
+  stepsInto($("doseSteps"),d.st);
+  const ph=(k&&photos[photoKey(k,d.s-1)])||{};
+  shotsInto($("doseShots"),[["ตอนจ่ายยา",ph.dispensed],["หลังหยิบยา",ph.taken]]);
+  const pill=$("dosePill"),taken=d.st.taken||{};
+  if(!d.done){pill.className="pill run";pill.textContent=taken.state==="run"?"รอหยิบยา":"กำลังจ่ายยา"}
+  else if(d.ok){pill.className="pill ok";pill.textContent="รับยาแล้ว"}
+  else{pill.className="pill bad";pill.textContent="ไม่ได้รับยา"}
+}
+
+function renderTestShots(){
+  const box=$("testShots");box.innerHTML="";if(!test)return;
+  shotsInto(box,[["ตอนจ่ายยา",test.shots.test_dispensed],["หลังหยิบยา",test.shots.test_taken]]);
 }
 function startTest(f,s){
   if(!(f>=1&&f<=7&&s>=1&&s<=6)){toast("ชั้นต้องเป็น 1-7 และช่องต้องเป็น 1-6");return}
@@ -1212,13 +1289,15 @@ function connectESP(addr,auto){
     if(m.type==="log"){addLog("ESP32: "+m.msg);return}
     if(m.type==="taken"&&m.floor&&m.slot){markTaken(m.floor,m.slot,m.at);addLog("เซนเซอร์: รับยาชั้น "+m.floor+" ช่อง "+m.slot+" แล้ว");return}
     if(m.type==="test"){onTestMsg(m);return}
+    if(m.type==="dose"&&m.floor&&m.slot){onDoseMsg(m);return}
     if(m.type==="photo_error"){const e=m.msg||"ถ่ายภาพไม่สำเร็จ";
       if(m.phase==="test")camShot(null,e);else if(m.phase==="test_dispensed"||m.phase==="test_taken")testPhoto(m.phase,null,e);
+      else if((m.phase==="dispensed"||m.phase==="taken")&&m.floor&&m.slot)dosePhoto(m.floor,m.slot,m.phase,e);
       addLog("กล้อง: "+e);return}
     if(m.type==="photo"&&typeof m.img==="string"&&m.img.startsWith("data:image/")&&m.phase==="test"){camShot(m.img);return}
     if(m.type==="photo"&&typeof m.img==="string"&&m.img.startsWith("data:image/")&&(m.phase==="test_dispensed"||m.phase==="test_taken")){
       testPhoto(m.phase,m.img);addLog("กล้อง: ได้ภาพทดสอบ"+(m.phase==="test_taken"?"หลังหยิบยา":"ตอนจ่ายยา"));return}
-    if(m.type==="photo"&&m.floor&&m.slot&&typeof m.img==="string"&&m.img.startsWith("data:image/")){setPhoto(m.floor,m.slot,m.img,m.phase);addLog("กล้อง: ได้ภาพ"+({dispensed:"ตอนจ่ายยา",taken:"หลังรับยา"}[m.phase]||"")+" ชั้น "+m.floor+" ช่อง "+m.slot);return}
+    if(m.type==="photo"&&m.floor&&m.slot&&typeof m.img==="string"&&m.img.startsWith("data:image/")){setPhoto(m.floor,m.slot,m.img,m.phase);if(m.phase==="dispensed"||m.phase==="taken")dosePhoto(m.floor,m.slot,m.phase);addLog("กล้อง: ได้ภาพ"+({dispensed:"ตอนจ่ายยา",taken:"หลังรับยา"}[m.phase]||"")+" ชั้น "+m.floor+" ช่อง "+m.slot);return}
     if(m.type==="status"){espClock=Date.now();if(m.rtc)$("rtc").textContent=m.rtc;
       if(typeof m.ir==="number")$("irLive").textContent=m.ir+" · "+(m.pill?"มียาในถาด":"ถาดว่าง");
       if(m.floor&&m.slot&&(m.floor!==cur.f||m.slot!==cur.s))goto(m.floor,m.slot);return}

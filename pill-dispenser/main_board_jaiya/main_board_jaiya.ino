@@ -17,7 +17,7 @@
     {"cmd":"time",...}      ตั้ง RTC                 {"type":"status","rtc":"08:00:05","floor":1,"slot":1,"pill":false,"ir":3500}
     {"cmd":"schedule",...}  ตั้งเวลายา              {"floor":1,"slot":1,"state":"moving"|"ready"|"dispensing"}
     {"cmd":"test",floor,slot}     ทดสอบครบวงจร       {"type":"taken","floor":1,"slot":1,"at":"2026-11-15T08:03:10"}
-    {"cmd":"dispense",floor,slot} ไปช่อง+ดันยา+เพลง  {"type":"snap",...} ให้กล้องถ่ายภาพ, {"type":"test",...}, {"type":"log",...}
+    {"cmd":"dispense",floor,slot} ไปช่อง+ดันยา+เพลง  {"type":"snap",...} ให้กล้องถ่ายภาพ, {"type":"test"|"dose",...}, {"type":"log",...}
     {"cmd":"goto",floor,slot}     ไปช่องอย่างเดียว
     {"cmd":"ir"} {"cmd":"cancel"} {"cmd":"calibrate","state":"empty"|"pill"}   และ TEST <day 0-6> <slot 0-5> แบบเดิม
   ชั้น 1-7 ในเว็บ = วัน SUN..SAT (แกน X), ช่อง 1-6 = Slot 1-6 (แกน Y)
@@ -209,10 +209,11 @@ void webSnap(const char *phase) {        // ให้กล้องถ่าย
   sendJson(d);
 }
 
-void webTest(const char *step, bool ok, const String &msg) {   // รายงานผลทดสอบทีละขั้น
-  if (doseMode != DM_TEST) return;
+// รายงานความคืบหน้าทีละขั้น: ทดสอบ -> type "test" (หน้า SETTING), มื้อยาตามตาราง -> type "dose" (หน้า START)
+void webTest(const char *step, bool ok, const String &msg) {
+  if (doseMode != DM_TEST && doseMode != DM_SCHEDULED) return;
   JsonDocument d;
-  d["type"] = "test"; d["floor"] = activeAlarmDay + 1; d["slot"] = activeAlarmSlot + 1;
+  d["type"] = doseMode == DM_TEST ? "test" : "dose"; d["floor"] = activeAlarmDay + 1; d["slot"] = activeAlarmSlot + 1;
   d["step"] = step; d["ok"] = ok;
   if (msg.length()) d["msg"] = msg;
   sendJson(d);
@@ -301,7 +302,7 @@ void endDose() { doseActive = false; doseMode = DM_NONE; }
 void startJob(int day, int slot, DoseMode mode, bool onlyMove) {
   if (currentState == ALARM_RINGING || currentState == MOVING_TO_BOX) { webLog("เครื่องกำลังทำงานอยู่"); return; }
   if (doseActive) {                                   // ปิดงานเก่าที่ยังรอหยิบยา
-    if (doseMode == DM_TEST) { webTest("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); webTest("done", false, ""); }
+    webTest("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); webTest("done", false, "");
     endDose();
   }
   activeAlarmDay = day;
@@ -370,6 +371,7 @@ void updateDose() {
   if (doseMode == DM_SCHEDULED && pillSeen && present && rings < MAX_RINGS &&
       millis() - lastRingMs >= REMIND_MS && currentState == HOME) {
     webLog("ยังไม่ได้หยิบยา เตือนครั้งที่ " + String(rings + 1));
+    webTest("ring", true, "เตือนครั้งที่ " + String(rings + 1));
     currentState = ALARM_RINGING;                                  // เปิดเพลงซ้ำ
   }
 
@@ -381,6 +383,7 @@ void updateDose() {
   }
   if (millis() - doseStartMs >= MISSED_MS) {
     webLog("ไม่ได้รับยา " + slotName(activeAlarmDay, activeAlarmSlot));
+    webTest("taken", false, "ไม่ได้หยิบยาภายใน 60 นาที"); webTest("done", false, "");
     endDose();
   }
 }

@@ -81,14 +81,16 @@ function ring() {
 }
 
 const testStep = (step, ok, msg) => {
-  if (dose && dose.mode === "test") send({ type: "test", floor: dose.f, slot: dose.s, step, ok, ...(msg ? { msg } : {}) });
+  // ทดสอบ -> "test" (หน้า SETTING) · มื้อยาตามตาราง -> "dose" (หน้า START) เหมือนบอร์ดจริง
+  if (dose && (dose.mode === "test" || dose.scheduled))
+    send({ type: dose.scheduled ? "dose" : "test", floor: dose.f, slot: dose.s, step, ok, ...(msg ? { msg } : {}) });
 };
 const phaseOf = p => (dose && dose.scheduled ? p : "test_" + p);
 
 async function startDose(f, s, mode) {
   if (dose) {
     clearTimeout(dose.timer);
-    if (dose.mode === "test") { testStep("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); testStep("done", false); }
+    testStep("taken", false, "ถูกแทรกด้วยคำสั่งใหม่"); testStep("done", false);
     log(`ปิดงานชั้น ${dose.f} ช่อง ${dose.s} เพราะมีงานใหม่`);
   }
   dose = { f, s, mode, scheduled: mode === "scheduled", start: 0, lastRing: 0, rings: 0, active: false };
@@ -110,7 +112,7 @@ async function startDose(f, s, mode) {
   if (mode === "test") {
     testStep("ring", true); ring();
     if (!pill) { testStep("taken", false, "ข้าม เพราะไม่พบยาในถาด"); testStep("done", false); dose = null; return; }
-  } else if (dose.scheduled) ring();
+  } else if (dose.scheduled) { testStep("ring", true); ring(); }
   dose.active = true;
   if (TAKE_AFTER > 0 && pill) dose.timer = setTimeout(() => { pill = false; }, TAKE_AFTER * 1000);
 }
@@ -132,9 +134,11 @@ function tick() {
       dose = null;
     } else if (dose.scheduled && dose.rings < MAX_RINGS && Date.now() - dose.lastRing >= REMIND * 1000) {
       log(`ยังไม่ได้หยิบยา เตือนครั้งที่ ${dose.rings + 1}`);
+      testStep("ring", true, `เตือนครั้งที่ ${dose.rings + 1}`);
       ring();
     } else if (Date.now() - dose.start >= MISSED_MS) {
       log(`ไม่ได้รับยา ชั้น ${dose.f} ช่อง ${dose.s}`);
+      testStep("taken", false, "ไม่ได้หยิบยาภายใน 60 นาที"); testStep("done", false);
       dose = null;
     }
   }

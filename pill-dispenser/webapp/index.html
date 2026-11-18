@@ -551,14 +551,13 @@ pre.json{background:var(--ink);color:#d9e6ff;border-radius:8px;padding:12px;font
   </div>
   <div class="dlg-body">
     <span class="status-big" id="dlgStatus"></span>
+    <ol class="checks" id="dlgSteps"></ol>
     <div class="photos" id="dlgPhoto"></div>
-    <ol class="timeline" id="dlgTimeline"></ol>
-    <ol class="checks" id="dlgSteps" hidden></ol>
     <div class="row" style="margin-top:0">
       <button class="btn" id="dlgCapture">ถ่ายภาพจากกล้อง</button>
       <button class="btn ghost" id="dlgTaken"></button>
     </div>
-    <p class="dlg-note">สถานะ “รับยาแล้ว” จะอัปเดตเองเมื่อติดตั้งเซนเซอร์ที่ช่องรับยา ระหว่างนี้กดปุ่มเพื่อบันทึกเองได้</p>
+    <p class="dlg-note">ขั้นตอนอัปเดตเองตามเครื่องจริงขณะเปิดหน้าเว็บนี้อยู่ · ถ้าเซนเซอร์พลาด กด “บันทึกว่ารับยาแล้ว” เองได้</p>
   </div>
 </dialog>
 
@@ -784,6 +783,19 @@ function slotStatus(k,s){
 }
 function hm(d){return d.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",hour12:false})}
 let dlgSlot=null;
+// ขั้นตอนของช่องที่ยังไม่มีข้อมูลจากเครื่อง (ยังไม่ถึงเวลา หรือหน้าเว็บไม่ได้เปิดตอนจ่ายยา)
+function slotSteps(sl,st,ph){
+  const o={},skip=m=>({state:"skip",msg:m||""});
+  if(st==="off"){o.move={state:"wait",msg:"ช่องนี้ยังไม่ได้ตั้งเวลา"};return o}
+  if(st==="wait"){o.move={state:"wait",msg:"เครื่องจะเริ่มเวลา "+sl.time+" น."};return o}
+  const noInfo="ไม่มีรายละเอียด เพราะหน้าเว็บไม่ได้เปิดตอนเครื่องจ่ายยา";
+  ["move","push","pill","ring"].forEach((k,i)=>o[k]=skip(i?"":noInfo));
+  if(ph.dispensed){o.pill={state:"ok",msg:""};o.photo1={state:"ok",msg:""}}else o.photo1=skip();
+  if(sl.taken){o.taken={state:"ok",msg:"เวลา "+hm(new Date(sl.taken))+" น."};o.photo2=ph.taken?{state:"ok",msg:""}:skip()}
+  else if(st==="missed"){o.taken={state:"fail",msg:"ไม่ได้รับยาภายใน 60 นาที"};o.photo2=skip()}
+  else o.taken={state:"run",msg:"รอหยิบยาออกจากถาด"};
+  return o;
+}
 function openSlot(k,s){dlgSlot={k,s};renderSlot();const d=$("slotDlg");if(!d.open)d.showModal()}
 function renderSlot(){
   if(!dlgSlot)return;
@@ -805,16 +817,9 @@ function renderSlot(){
     else{div.className="photo";div.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>ยังไม่มีภาพ</b><span style="font-size:.75rem">'+empty+'</span>'}
     fig.append(fc,div);box.appendChild(fig);
   });
-  const due=sl.on?dueOf(k,s):null,now=new Date();
-  const steps=[
-    {lbl:"ตั้งเวลา",sub:sl.on?"กำหนดจ่ายยา "+sl.time+" น.":"ช่องนี้ยังไม่ได้ตั้งเวลา",when:"",cls:sl.on?"done":""},
-    {lbl:"เครื่องจ่ายยา",sub:"หมุนถาดมาที่ช่องทางออก",when:due?hm(due):"",cls:due&&now>=due?"done":""},
-    {lbl:"รับยา",sub:sl.taken?"ตรวจพบว่ารับยาแล้ว":st==="missed"?"ไม่ได้รับยา":"รอเซนเซอร์ตรวจจับการรับยา",
-      when:sl.taken?hm(new Date(sl.taken)):"",cls:sl.taken?"done":st==="missed"?"bad":""}
-  ];
-  const dd=doses[photoKey(k,s)];$("dlgSteps").hidden=!dd;$("dlgTimeline").hidden=!!dd;
-  if(dd)stepsInto($("dlgSteps"),dd.st);
-  $("dlgTimeline").innerHTML=steps.map((x,i)=>'<li class="'+x.cls+'"><span class="dot">'+(x.cls==="done"?"✓":x.cls==="bad"?"!":i+1)+'</span><div><div class="lbl">'+x.lbl+'</div><div class="sub">'+x.sub+'</div></div><span class="when">'+x.when+'</span></li>').join("");
+  // 7 ขั้นแบบเดียวกับกล่องทดสอบใน SETTING: ใช้ข้อมูลจริงจากเครื่องถ้ามี ไม่งั้นสรุปจากตารางเวลา
+  const dd=doses[photoKey(k,s)];
+  stepsInto($("dlgSteps"),dd?dd.st:slotSteps(sl,st,ph));
   const tb=$("dlgTaken");tb.hidden=!sl.on;tb.textContent=sl.taken?"ยกเลิกสถานะรับยา":"บันทึกว่ารับยาแล้ว";
 }
 $("dlgClose").onclick=()=>$("slotDlg").close();

@@ -1194,15 +1194,16 @@ function setPill(ok,txt){[$("livePill"),$("connPill")].forEach(p=>{p.className="
 let espClock=0;
 function sendCmd(o){if(ws&&ws.readyState===1){ws.send(JSON.stringify(o));return true}return false}
 const ST={moving:"กำลังหมุน",ready:"พร้อม",dispensing:"กำลังดันยา"};
-function connectESP(addr){
-  addr=addr.trim();save("p7_esp",addr);
+let reT=null,reN=0;   // เชื่อมต่อใหม่อัตโนมัติเมื่อฮอตสปอตหลุด
+function connectESP(addr,auto){
+  addr=addr.trim();save("p7_esp",addr);clearTimeout(reT);if(!auto)reN=0;
   if(location.protocol==="https:"&&addr.startsWith("ws://")){
     addLog("หน้านี้เปิดผ่านอินเทอร์เน็ต (https) จึงเชื่อมกับเครื่องในบ้านไม่ได้");
     toast("ให้เปิดเว็บจากคอมที่อยู่ Wi‑Fi เดียวกับเครื่องแทน");return}
   try{if(ws)ws.close();ws=new WebSocket(addr)}catch(e){addLog("เชื่อมต่อ "+addr+" ไม่ได้: "+e.message);toast("ที่อยู่ไม่ถูกต้อง ตัวอย่าง ws://192.168.1.50:81");return}
-  addLog("กำลังเชื่อมต่อ "+addr+" …");
+  if(!auto)addLog("กำลังเชื่อมต่อ "+addr+" …");
   const me=ws;
-  ws.onopen=()=>{setPill(true,"เชื่อมต่อแล้ว");addLog("เชื่อมต่อ ESP32 สำเร็จ");toast("เชื่อมต่อเครื่องจ่ายยาแล้ว");
+  ws.onopen=()=>{setPill(true,"เชื่อมต่อแล้ว");addLog(reN?"เชื่อมต่อใหม่สำเร็จ (ลองใหม่ "+reN+" ครั้ง)":"เชื่อมต่อ ESP32 สำเร็จ");toast("เชื่อมต่อเครื่องจ่ายยาแล้ว");reN=0;
     const n=new Date();
     sendCmd({cmd:"time",y:n.getFullYear(),mo:n.getMonth()+1,d:n.getDate(),h:n.getHours(),mi:n.getMinutes(),s:n.getSeconds()});
     sendCmd({cmd:"schedule",data:payload()});
@@ -1223,8 +1224,10 @@ function connectESP(addr){
       if(m.floor&&m.slot&&(m.floor!==cur.f||m.slot!==cur.s))goto(m.floor,m.slot);return}
     if(m.floor&&m.slot){goto(m.floor,m.slot);if(m.state==="dispensing")pushNow();addLog("ESP32: ชั้น "+m.floor+" ช่อง "+m.slot+" · "+(ST[m.state]||m.state||""))}
   };
-  ws.onerror=()=>{addLog("เชื่อมต่อ "+addr+" ไม่สำเร็จ ตรวจว่า ESP32 เปิดอยู่และใช้ Wi‑Fi เดียวกัน");toast("ยังไม่พบ ESP32")};
-  ws.onclose=()=>{if(ws===me){setPill(false,"โหมดจำลอง");espClock=0;$("irLive").textContent="— (ยังไม่ได้เชื่อมต่อ)"}};
+  ws.onerror=()=>{if(auto)return;addLog("เชื่อมต่อ "+addr+" ไม่สำเร็จ ตรวจว่า ESP32 เปิดอยู่และใช้ Wi‑Fi เดียวกัน");toast("ยังไม่พบ ESP32")};
+  ws.onclose=()=>{if(ws===me){setPill(false,"หลุด · กำลังเชื่อมต่อใหม่");espClock=0;$("irLive").textContent="— (ยังไม่ได้เชื่อมต่อ)";
+    if(!reN)addLog("การเชื่อมต่อหลุด จะลองเชื่อมต่อใหม่เองทุก 3 วินาที");reN++;
+    reT=setTimeout(()=>{if(ws===me)connectESP(addr,true)},3000)}};
 }
 $("copyJson").onclick=()=>{const t=$("json").textContent;
   navigator.clipboard.writeText(t).then(()=>toast("คัดลอก JSON แล้ว"),()=>{const r=document.createRange();r.selectNodeContents($("json"));const s=getSelection();s.removeAllRanges();s.addRange(r);toast("เลือกข้อความแล้ว กด Ctrl+C เพื่อคัดลอก")})};
